@@ -40,6 +40,11 @@ if ($id > 0) {
             }
         }
 
+        // Generated link-preview cards for this coin, whatever their cache key.
+        foreach (glob($uploadDir . 'social_' . (int)$id . '_*.jpg') ?: [] as $card) {
+            @unlink($card);
+        }
+
         $pdo->prepare("DELETE FROM coins WHERE id = :id")->execute([':id' => $id]);
     }
 }

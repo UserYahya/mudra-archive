@@ -1,5 +1,7 @@
 # The SQLite database, its backups and the generated credential file must never
-# be downloadable over HTTP.
+# be downloadable over HTTP. Require all denied already blocks every request,
+# so no php_flag is needed here - and an unguarded php_flag would return 500 on
+# a host running PHP through FPM or CGI.
 <IfModule mod_authz_core.c>
     Require all denied
 </IfModule>
@@ -7,5 +9,5 @@
     Order deny,allow
     Deny from all
 </IfModule>
-php_flag engine off
+
 Options -Indexes

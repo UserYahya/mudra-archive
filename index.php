@@ -186,6 +186,12 @@ $pageDescription = sprintf(
     SITE_AUTHOR
 );
 
+// Landscape card for link previews, composed from the featured coins. Falls
+// back to the logo if GD is unavailable or no coin has a photograph yet.
+$socialPath = collection_social_image($heroCoins) ?: placeholder_image_path();
+$socialUrl  = absolute_url($socialPath, $baseUrl);
+$socialDims = image_dimensions($socialPath);
+
 // rel=prev/next are machine-facing, so they carry no #collection fragment.
 $prevUrl = $page > 1 ? $baseUrl . home_url($currentFilters + ($page - 1 > 1 ? ['page' => $page - 1] : [])) : null;
 $nextUrl = $page < $totalPages ? $baseUrl . home_url($currentFilters + ['page' => $page + 1]) : null;
@@ -231,15 +237,22 @@ $cssVersion = file_exists(__DIR__ . '/assets/css/style.css') ? filemtime(__DIR__
     <meta property="og:url" content="<?= sanitize($canonicalUrl) ?>"/>
     <meta property="og:title" content="<?= sanitize($pageTitle) ?>"/>
     <meta property="og:description" content="<?= sanitize(truncate_text($pageDescription, 200)) ?>"/>
-    <meta property="og:image" content="<?= $baseUrl ?>/assets/logo.png"/>
-    <meta property="og:image:alt" content="<?= sanitize(SITE_NAME) ?> logo"/>
+    <meta property="og:image" content="<?= sanitize($socialUrl) ?>"/>
+    <meta property="og:image:secure_url" content="<?= sanitize($socialUrl) ?>"/>
+    <?php if ($socialDims): ?>
+        <meta property="og:image:width" content="<?= (int)$socialDims['width'] ?>"/>
+        <meta property="og:image:height" content="<?= (int)$socialDims['height'] ?>"/>
+        <meta property="og:image:type" content="<?= sanitize($socialDims['mime']) ?>"/>
+    <?php endif; ?>
+    <meta property="og:image:alt" content="Coins from the <?= sanitize(SITE_NAME) ?> collection"/>
 
     <!-- Twitter Card Meta Tags (Absolute URLs) -->
     <meta name="twitter:card" content="summary_large_image"/>
     <meta name="twitter:url" content="<?= sanitize($canonicalUrl) ?>"/>
     <meta name="twitter:title" content="<?= sanitize($pageTitle) ?>"/>
     <meta name="twitter:description" content="<?= sanitize(truncate_text($pageDescription, 200)) ?>"/>
-    <meta name="twitter:image" content="<?= $baseUrl ?>/assets/logo.png"/>
+    <meta name="twitter:image" content="<?= sanitize($socialUrl) ?>"/>
+    <meta name="twitter:image:alt" content="Coins from the <?= sanitize(SITE_NAME) ?> collection"/>
 
     <!-- Early Theme & Safety Inline Resets -->
     <script>

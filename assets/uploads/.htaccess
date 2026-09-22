@@ -1,7 +1,11 @@
 # Uploaded coin photographs are static images and nothing else.
 # If a crafted file ever survives validation, it must not be executable here.
-
-php_flag engine off
+#
+# Every php_flag / php_value directive is guarded by <IfModule>. Those
+# directives are only understood by mod_php; on a host running PHP through
+# FPM or CGI - which most cPanel servers now do - an unguarded php_flag is a
+# fatal configuration error and Apache returns 500 for this whole directory,
+# which would break every coin photograph on the site.
 
 <IfModule mod_php.c>
     php_flag engine off
@@ -13,14 +17,14 @@ php_flag engine off
     php_flag engine off
 </IfModule>
 
-RemoveHandler .php .phtml .php3 .php4 .php5 .php7 .php8 .phps .cgi .pl .py .sh
-RemoveType .php .phtml .php3 .php4 .php5 .php7 .php8 .phps
-
+# Handler-based blocking, which works regardless of how PHP is run.
 <IfModule mod_mime.c>
+    RemoveHandler .php .phtml .php3 .php4 .php5 .php7 .php8 .phps .cgi .pl .py .sh
+    RemoveType .php .phtml .php3 .php4 .php5 .php7 .php8 .phps
     AddType text/plain .php .phtml .php3 .php4 .php5 .php7 .php8 .phps .cgi .pl .py .sh
 </IfModule>
 
-# Serve only real image types from this directory.
+# Refuse to serve anything executable from this directory.
 <FilesMatch "(?i)\.(php|phtml|php[0-9]|phps|cgi|pl|py|sh|htaccess|inc)$">
     <IfModule mod_authz_core.c>
         Require all denied
@@ -31,4 +35,4 @@ RemoveType .php .phtml .php3 .php4 .php5 .php7 .php8 .phps
     </IfModule>
 </FilesMatch>
 
-Options -Indexes -ExecCGI
+Options -Indexes

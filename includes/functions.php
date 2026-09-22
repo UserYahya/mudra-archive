@@ -528,6 +528,166 @@ function get_coin_image_path($imageFileName, $baseDir = '/assets/uploads/') {
         : placeholder_image_path();
 }
 
+// --- Social preview cards -------------------------------------------------
+
+/**
+ * Compose a 1200x630 preview card from up to four coin photographs laid out as
+ * circles on the archival cream background, and return its root-relative path.
+ *
+ * Link previews need a landscape image. A bare coin photo is square, around
+ * 300 KB, and carries no dimension metadata, which is why Facebook, LinkedIn
+ * and WhatsApp were showing a title and description with no picture:
+ *   - 1200x630 is the aspect ratio Open Graph and summary_large_image expect;
+ *     a square image is cropped top and bottom, which beheads a round coin.
+ *   - WhatsApp drops preview images over roughly 300 KB, and several of the
+ *     full-size photographs are larger than that.
+ *   - og:image:width / og:image:height let a scraper render the card on the
+ *     first fetch instead of queueing the image and showing nothing.
+ *
+ * Cards are cached on disk and keyed by their source files, so a card is
+ * rebuilt only when the coin's photographs change.
+ *
+ * @return string|null Root-relative path, or null when GD cannot produce one.
+ */
+function generate_social_card(array $sourceFiles, $cacheKey) {
+    if (!extension_loaded('gd') || !function_exists('imagecreatefromstring')) {
+        return null;
+    }
+
+    $sourceFiles = array_values(array_filter($sourceFiles, 'is_file'));
+    if (!$sourceFiles) {
+        return null;
+    }
+
+    $uploadDir = __DIR__ . '/../assets/uploads/';
+    $fileName  = 'social_' . preg_replace('/[^A-Za-z0-9_]/', '', $cacheKey) . '.jpg';
+    $outPath   = $uploadDir . $fileName;
+    $webPath   = '/assets/uploads/' . $fileName;
+
+    if (is_file($outPath)) {
+        return $webPath;
+    }
+    if (!is_dir($uploadDir) || !is_writable($uploadDir)) {
+        return null;
+    }
+
+    $W = 1200; $H = 630; $PAD = 60; $GAP = 40;
+
+    $canvas = imagecreatetruecolor($W, $H);
+    // Warm archival cream, matching --surface-bright in the stylesheet.
+    $bg = imagecolorallocate($canvas, 0xF8, 0xF6, 0xF0);
+    imagefilledrectangle($canvas, 0, 0, $W, $H, $bg);
+    $ring = imagecolorallocate($canvas, 0xD8, 0xD3, 0xC6);
+
+    $sources = [];
+    foreach (array_slice($sourceFiles, 0, 4) as $file) {
+        $data = @file_get_contents($file);
+        if ($data === false) continue;
+        $img = @imagecreatefromstring($data);
+        if ($img !== false) $sources[] = $img;
+    }
+    if (!$sources) {
+        imagedestroy($canvas);
+        return null;
+    }
+
+    $n = count($sources);
+    $d = (int)min($H - 2 * $PAD, ($W - 2 * $PAD - ($n - 1) * $GAP) / $n);
+    $r = $d / 2;
+    $totalW = $n * $d + ($n - 1) * $GAP;
+    $startX = (int)(($W - $totalW) / 2);
+    $topY   = (int)(($H - $d) / 2);
+
+    foreach ($sources as $i => $src) {
+        // Crop to a centred square first so the coin is never distorted.
+        $sw = imagesx($src); $sh = imagesy($src);
+        $side = min($sw, $sh);
+        $sx = (int)(($sw - $side) / 2);
+        $sy = (int)(($sh - $side) / 2);
+
+        $square = imagecreatetruecolor($d, $d);
+        imagefilledrectangle($square, 0, 0, $d, $d, imagecolorallocate($square, 255, 255, 255));
+        imagecopyresampled($square, $src, 0, 0, $sx, $sy, $d, $d, $side, $side);
+
+        // Copy the square onto the canvas one row at a time, clipped to the
+        // circle. GD has no alpha masking, and this is exact and quick.
+        $cx = $startX + $i * ($d + $GAP);
+        for ($y = 0; $y < $d; $y++) {
+            $dy   = $y - $r + 0.5;
+            $half = sqrt(max(0.0, $r * $r - $dy * $dy));
+            $x0   = (int)round($r - $half);
+            $w    = (int)round(2 * $half);
+            if ($w > 0) {
+                imagecopy($canvas, $square, $cx + $x0, $topY + $y, $x0, $y, $w, 1);
+            }
+        }
+
+        imagesetthickness($canvas, 3);
+        imageellipse($canvas, (int)($cx + $r), (int)($topY + $r), $d, $d, $ring);
+
+        imagedestroy($square);
+        imagedestroy($src);
+    }
+
+    // Quality 80 keeps a two-coin card comfortably under 150 KB.
+    $ok = imagejpeg($canvas, $outPath, 80);
+    imagedestroy($canvas);
+
+    return $ok ? $webPath : null;
+}
+
+/**
+ * Social preview card for one coin: obverse and reverse side by side.
+ */
+function coin_social_image(array $coin) {
+    $uploadDir = __DIR__ . '/../assets/uploads/';
+    $files = [];
+    foreach (['obverse_image', 'reverse_image'] as $field) {
+        $name = safe_upload_name($coin[$field] ?? '');
+        if ($name !== '' && is_file($uploadDir . $name)) {
+            $files[] = $uploadDir . $name;
+        }
+    }
+    if (!$files) {
+        return null;
+    }
+
+    $key = (int)$coin['id'] . '_' . substr(md5(implode('|', $files) . '|' . ($coin['updated_at'] ?? '')), 0, 10);
+    return generate_social_card($files, $key);
+}
+
+/**
+ * Social preview card for the gallery: the featured coins on the homepage.
+ */
+function collection_social_image(array $heroCoins) {
+    $uploadDir = __DIR__ . '/../assets/uploads/';
+    $files = [];
+    foreach ($heroCoins as $c) {
+        $name = safe_upload_name($c['obverse_image'] ?? '');
+        if ($name !== '' && is_file($uploadDir . $name)) {
+            $files[] = $uploadDir . $name;
+        }
+    }
+    if (!$files) {
+        return null;
+    }
+
+    $key = 'home_' . substr(md5(implode('|', $files)), 0, 10);
+    return generate_social_card($files, $key);
+}
+
+/**
+ * Pixel dimensions of a root-relative image path, for og:image:width/height.
+ */
+function image_dimensions($webPath) {
+    $file = __DIR__ . '/../' . ltrim((string)$webPath, '/');
+    if (!is_file($file)) {
+        return null;
+    }
+    $info = @getimagesize($file);
+    return $info ? ['width' => $info[0], 'height' => $info[1], 'mime' => $info['mime']] : null;
+}
+
 /**
  * Format price as currency string
  */

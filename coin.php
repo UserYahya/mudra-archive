@@ -49,6 +49,13 @@ $seoDesc     = coin_meta_description($coin);
 $summary     = coin_summary($coin);
 $fullObvUrl  = absolute_url($obvImg, $baseUrl);
 $fullRevUrl  = absolute_url($revImg, $baseUrl);
+
+// Landscape card for link previews, falling back to the obverse photograph if
+// GD cannot build one. Dimensions are read from whichever image is used, so the
+// og:image:width/height tags are always truthful.
+$socialPath = coin_social_image($coin) ?: $obvImg;
+$socialUrl  = absolute_url($socialPath, $baseUrl);
+$socialDims = image_dimensions($socialPath);
 $relatedCoins = get_related_coins($pdo, $coin, 6);
 
 $imageAltObv = 'Obverse of ' . $coinTitle;
@@ -176,16 +183,24 @@ $cssVersion = file_exists(__DIR__ . '/assets/css/style.css') ? filemtime(__DIR__
     <meta property="og:url" content="<?= sanitize($canonicalUrl) ?>"/>
     <meta property="og:title" content="<?= sanitize($coinTitle) ?>"/>
     <meta property="og:description" content="<?= sanitize($seoDesc) ?>"/>
-    <meta property="og:image" content="<?= sanitize($fullObvUrl) ?>"/>
-    <meta property="og:image:alt" content="<?= sanitize($imageAltObv) ?>"/>
+    <meta property="og:image" content="<?= sanitize($socialUrl) ?>"/>
+    <meta property="og:image:secure_url" content="<?= sanitize($socialUrl) ?>"/>
+    <?php if ($socialDims): ?>
+        <!-- Explicit dimensions let a scraper render the preview on its first
+             fetch rather than queueing the image and showing no picture. -->
+        <meta property="og:image:width" content="<?= (int)$socialDims['width'] ?>"/>
+        <meta property="og:image:height" content="<?= (int)$socialDims['height'] ?>"/>
+        <meta property="og:image:type" content="<?= sanitize($socialDims['mime']) ?>"/>
+    <?php endif; ?>
+    <meta property="og:image:alt" content="<?= sanitize($coinTitle) ?>"/>
 
     <!-- Twitter Card -->
     <meta name="twitter:card" content="summary_large_image"/>
     <meta name="twitter:url" content="<?= sanitize($canonicalUrl) ?>"/>
     <meta name="twitter:title" content="<?= sanitize($coinTitle) ?>"/>
     <meta name="twitter:description" content="<?= sanitize($seoDesc) ?>"/>
-    <meta name="twitter:image" content="<?= sanitize($fullObvUrl) ?>"/>
-    <meta name="twitter:image:alt" content="<?= sanitize($imageAltObv) ?>"/>
+    <meta name="twitter:image" content="<?= sanitize($socialUrl) ?>"/>
+    <meta name="twitter:image:alt" content="<?= sanitize($coinTitle) ?>"/>
 
     <!-- Early Theme Script (Prevents Flash of Light Mode) -->
     <script>

@@ -1,0 +1,11 @@
+# The SQLite database, its backups and the generated credential file must never
+# be downloadable over HTTP.
+<IfModule mod_authz_core.c>
+    Require all denied
+</IfModule>
+<IfModule !mod_authz_core.c>
+    Order deny,allow
+    Deny from all
+</IfModule>
+php_flag engine off
+Options -Indexes

@@ -1,0 +1,8 @@
+# Normalise line endings so the repo stays consistent across Windows and Linux.
+* text=auto eol=lf
+
+*.png binary
+*.jpg binary
+*.ico binary
+*.db  binary
+*.bat text eol=crlf

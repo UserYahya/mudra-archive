@@ -1,0 +1,84 @@
+# robots.txt for Mudra Archive (mudra.yahya.bd)
+#
+# Note on structure: a crawler obeys ONLY the most specific group that matches
+# its name and ignores every other group. So any named group below must repeat
+# the same Disallow rules as the wildcard group - naming a crawler and giving it
+# a bare "Allow: /" would exempt it from the rules above it.
+#
+# Crawling of the coin pages and the country hub views is deliberately open:
+# that is how every entry is discovered. Filter and sort permutations are thin
+# duplicates and are kept out.
+
+User-agent: *
+Allow: /
+Disallow: /admin/
+Disallow: /database/
+Disallow: /includes/
+Disallow: /_private/
+Disallow: /*?*sort=
+Disallow: /*?*year_min=
+Disallow: /*?*year_max=
+Disallow: /*?*grade=
+
+# --- AI answer engines and assistants ------------------------------------
+# Named explicitly so this archive can be read and cited in AI overviews and
+# chat answers. Each group repeats the rules above; only the public collection
+# is open to them.
+
+User-agent: Google-Extended
+Allow: /
+Disallow: /admin/
+Disallow: /database/
+Disallow: /includes/
+Disallow: /_private/
+
+User-agent: GPTBot
+Allow: /
+Disallow: /admin/
+Disallow: /database/
+Disallow: /includes/
+Disallow: /_private/
+
+User-agent: OAI-SearchBot
+Allow: /
+Disallow: /admin/
+Disallow: /database/
+Disallow: /includes/
+Disallow: /_private/
+
+User-agent: ChatGPT-User
+Allow: /
+Disallow: /admin/
+Disallow: /database/
+Disallow: /includes/
+Disallow: /_private/
+
+User-agent: ClaudeBot
+Allow: /
+Disallow: /admin/
+Disallow: /database/
+Disallow: /includes/
+Disallow: /_private/
+
+User-agent: Claude-SearchBot
+Allow: /
+Disallow: /admin/
+Disallow: /database/
+Disallow: /includes/
+Disallow: /_private/
+
+User-agent: PerplexityBot
+Allow: /
+Disallow: /admin/
+Disallow: /database/
+Disallow: /includes/
+Disallow: /_private/
+
+User-agent: Applebot-Extended
+Allow: /
+Disallow: /admin/
+Disallow: /database/
+Disallow: /includes/
+Disallow: /_private/
+
+Sitemap: https://mudra.yahya.bd/sitemap.xml

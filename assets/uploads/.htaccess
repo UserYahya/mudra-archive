@@ -1,0 +1,34 @@
+# Uploaded coin photographs are static images and nothing else.
+# If a crafted file ever survives validation, it must not be executable here.
+
+php_flag engine off
+
+<IfModule mod_php.c>
+    php_flag engine off
+</IfModule>
+<IfModule mod_php7.c>
+    php_flag engine off
+</IfModule>
+<IfModule mod_php8.c>
+    php_flag engine off
+</IfModule>
+
+RemoveHandler .php .phtml .php3 .php4 .php5 .php7 .php8 .phps .cgi .pl .py .sh
+RemoveType .php .phtml .php3 .php4 .php5 .php7 .php8 .phps
+
+<IfModule mod_mime.c>
+    AddType text/plain .php .phtml .php3 .php4 .php5 .php7 .php8 .phps .cgi .pl .py .sh
+</IfModule>
+
+# Serve only real image types from this directory.
+<FilesMatch "(?i)\.(php|phtml|php[0-9]|phps|cgi|pl|py|sh|htaccess|inc)$">
+    <IfModule mod_authz_core.c>
+        Require all denied
+    </IfModule>
+    <IfModule !mod_authz_core.c>
+        Order deny,allow
+        Deny from all
+    </IfModule>
+</FilesMatch>
+
+Options -Indexes -ExecCGI

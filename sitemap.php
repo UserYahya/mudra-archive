@@ -47,8 +47,8 @@ echo '<?xml version="1.0" encoding="UTF-8"?>' . "\n";
     $images = [];
     foreach (['obverse_image' => 'Obverse of ', 'reverse_image' => 'Reverse of '] as $field => $prefix) {
         $path = get_coin_image_path($c[$field]);
-        if ($path !== 'assets/logo.png') {
-            $images[] = ['url' => $baseUrl . '/' . $path, 'caption' => $prefix . $title];
+        if (!is_placeholder_image($path)) {
+            $images[] = ['url' => absolute_url($path, $baseUrl), 'caption' => $prefix . $title];
         }
     }
 ?>

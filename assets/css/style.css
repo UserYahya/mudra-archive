@@ -310,6 +310,19 @@ body {
     text-align: center;
 }
 
+/* Secondary figure under a statistic, e.g. catalogue entries beneath the
+   total number of pieces held. */
+.stat-pill-note {
+    font-family: 'Source Sans 3', sans-serif;
+    font-size: 0.68rem;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    color: var(--text-muted);
+    text-align: center;
+    margin-top: 0.1rem;
+    line-height: 1.1;
+}
+
 /* Cards & Layout */
 .card, .stat-card, .glass-card {
     background-color: var(--surface-card) !important;

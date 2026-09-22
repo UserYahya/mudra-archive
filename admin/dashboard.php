@@ -37,8 +37,8 @@ $goldCount = (int)$pdo->query("SELECT COUNT(*) FROM coins WHERE LOWER(material) 
     <title>Admin Dashboard - Mudra Archive</title>
     
     <!-- Favicons -->
-    <link rel="icon" type="image/x-icon" href="../assets/favicon.ico"/>
-    <link rel="apple-touch-icon" sizes="180x180" href="../assets/apple-touch-icon.png"/>
+    <link rel="icon" type="image/x-icon" href="/assets/favicon.ico"/>
+    <link rel="apple-touch-icon" sizes="180x180" href="/assets/apple-touch-icon.png"/>
 
     <meta name="robots" content="noindex, nofollow, noarchive"/>
 
@@ -51,7 +51,7 @@ $goldCount = (int)$pdo->query("SELECT COUNT(*) FROM coins WHERE LOWER(material) 
     <!-- Bootstrap 5 CSS via CDN -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet"/>
     <!-- Master Custom Stylesheet -->
-    <link href="../assets/css/style.css?v=<?= file_exists(__DIR__ . '/../assets/css/style.css') ? filemtime(__DIR__ . '/../assets/css/style.css') : time() ?>" rel="stylesheet"/>
+    <link href="/assets/css/style.css?v=<?= file_exists(__DIR__ . '/../assets/css/style.css') ? filemtime(__DIR__ . '/../assets/css/style.css') : time() ?>" rel="stylesheet"/>
 </head>
 <body>
 
@@ -59,7 +59,7 @@ $goldCount = (int)$pdo->query("SELECT COUNT(*) FROM coins WHERE LOWER(material) 
     <header class="app-header d-flex align-items-center px-3 px-md-4">
         <div class="container-fluid max-w-container-max d-flex justify-content-between align-items-center p-0">
             <a href="dashboard.php" class="d-flex align-items-center gap-2 text-decoration-none">
-                <img src="../assets/logo.png" alt="Mudra Archive Logo" class="nav-logo-img"/>
+                <img src="/assets/logo.png" alt="Mudra Archive Logo" class="nav-logo-img"/>
                 <span class="brand-title">Mudra Archive</span>
                 <span class="badge bg-secondary-subtle text-dark border ms-1">Admin</span>
             </a>
@@ -181,7 +181,7 @@ $goldCount = (int)$pdo->query("SELECT COUNT(*) FROM coins WHERE LOWER(material) 
                         <?php foreach ($coins as $c): ?>
                             <?php
                                 $obvImg = !empty($c['obverse_image']) && file_exists(__DIR__ . '/../assets/uploads/' . $c['obverse_image'])
-                                    ? '../assets/uploads/' . $c['obverse_image']
+                                    ? '/assets/uploads/' . $c['obverse_image']
                                     : '../assets/logo.png';
                             ?>
                             <tr>

@@ -56,20 +56,20 @@ $cssVersion = file_exists(__DIR__ . '/../assets/css/style.css') ? filemtime(__DI
     <meta name="robots" content="noindex, nofollow, noarchive"/>
     <title>Account Security - <?= sanitize(SITE_NAME) ?></title>
 
-    <link rel="icon" type="image/x-icon" href="../assets/favicon.ico"/>
+    <link rel="icon" type="image/x-icon" href="/assets/favicon.ico"/>
     <link rel="preconnect" href="https://fonts.googleapis.com"/>
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin=""/>
     <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400..900;1,400..900&family=Source+Sans+3:ital,wght@0,300..900;1,300..900&display=swap" rel="stylesheet"/>
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200"/>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet"/>
-    <link href="../assets/css/style.css?v=<?= $cssVersion ?>" rel="stylesheet"/>
+    <link href="/assets/css/style.css?v=<?= $cssVersion ?>" rel="stylesheet"/>
 </head>
 <body>
 
     <header class="app-header d-flex align-items-center px-3 px-md-4">
         <div class="container-fluid max-w-container-max d-flex justify-content-between align-items-center p-0">
             <a href="dashboard.php" class="d-flex align-items-center gap-2 text-decoration-none">
-                <img src="../assets/logo.png" alt="<?= sanitize(SITE_NAME) ?> logo" class="nav-logo-img"/>
+                <img src="/assets/logo.png" alt="<?= sanitize(SITE_NAME) ?> logo" class="nav-logo-img"/>
                 <span class="brand-title"><?= sanitize(SITE_NAME) ?></span>
                 <span class="badge bg-secondary-subtle text-dark border ms-1">Admin</span>
             </a>

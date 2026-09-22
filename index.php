@@ -178,8 +178,8 @@ $pageTitle = $isFiltered && $countryFilter !== ''
     : sprintf('%s — %s', SITE_NAME, SITE_TAGLINE);
 
 $pageDescription = sprintf(
-    'Browse %s coins from %d %s in the %s, a personal numismatic collection curated by %s. Every entry records denomination, year, mint mark, metal, weight, diameter and grade, with photographs of both faces.',
-    number_format($totalCoinsCount),
+    'Browse %s catalogued coins from %d %s in the %s, a personal numismatic collection curated by %s. Every entry records denomination, year, mint mark, metal, weight, diameter and grade, with photographs of both faces.',
+    number_format($totalEntries),
     $totalCountries,
     $countryLabel,
     SITE_NAME,
@@ -648,7 +648,8 @@ $cssVersion = file_exists(__DIR__ . '/assets/css/style.css') ? filemtime(__DIR__
         [
             'What is the Mudra Archive?',
             SITE_NAME . ' is a personal digital museum of world coins curated by ' . SITE_AUTHOR . '. It catalogues ' .
-            number_format($totalCoinsCount) . ' coins from ' . $totalCountries . ' ' . $countryLabel .
+            number_format($totalEntries) . ' catalogued coins (' . number_format($totalCoinsCount) .
+            ' pieces in total, since some are held in multiples) from ' . $totalCountries . ' ' . $countryLabel .
             ', each recorded with its denomination, year, mint mark, metal, weight, diameter and condition grade, alongside photographs of the obverse and reverse.',
         ],
         [
@@ -700,7 +701,7 @@ $cssVersion = file_exists(__DIR__ . '/assets/css/style.css') ? filemtime(__DIR__
         <div class="container-fluid max-w-container-max p-0">
             <div class="d-flex justify-content-between align-items-center py-2">
                 <a href="/" class="d-flex align-items-center gap-2 text-decoration-none">
-                    <img src="assets/logo.png" alt="Mudra Archive Logo" class="nav-logo-img" width="38" height="38"/>
+                    <img src="/assets/logo.png" alt="Mudra Archive Logo" class="nav-logo-img" width="38" height="38"/>
                     <span class="brand-title">Mudra Archive</span>
                 </a>
 
@@ -778,9 +779,15 @@ $cssVersion = file_exists(__DIR__ . '/assets/css/style.css') ? filemtime(__DIR__
                     <!-- Dynamic 4-Metric Museum Statistics Grid (Coins, Countries, Currencies, Era Span) -->
                     <div id="statistics" class="row row-cols-2 row-cols-md-4 g-2 g-md-3">
                         <div class="col">
-                            <div class="stat-pill">
+                            <div class="stat-pill" title="<?= number_format($totalCoinsCount) ?> pieces held across <?= number_format($totalEntries) ?> catalogue entries">
                                 <div class="stat-pill-label">Coins</div>
                                 <div class="stat-pill-value text-primary"><?= number_format($totalCoinsCount) ?></div>
+                                <?php if ($totalEntries !== $totalCoinsCount): ?>
+                                    <!-- Pieces held and catalogue entries are different numbers whenever
+                                         a coin is held in multiples. Both were previously labelled
+                                         "coins", which read as a contradiction against the gallery. -->
+                                    <div class="stat-pill-note"><?= number_format($totalEntries) ?> entries</div>
+                                <?php endif; ?>
                             </div>
                         </div>
                         <div class="col">
@@ -896,7 +903,10 @@ $cssVersion = file_exists(__DIR__ . '/assets/css/style.css') ? filemtime(__DIR__
                     </a>
                 </div>
                 <div class="small text-muted d-none d-sm-block">
-                    Showing <?= count($coins) ?> of <?= $totalMatching ?> coins (Page <?= $page ?> of <?= $totalPages ?>)
+                    <!-- "entries", not "coins": this counts catalogue records, while the
+                         Coins statistic counts pieces held. Naming the unit is what stops
+                         the two figures reading as a contradiction. -->
+                    Showing <?= count($coins) ?> of <?= number_format($totalMatching) ?> entr<?= $totalMatching === 1 ? 'y' : 'ies' ?><?= $totalPages > 1 ? ' (Page ' . $page . ' of ' . $totalPages . ')' : '' ?>
                 </div>
             </div>
 
@@ -1206,7 +1216,7 @@ $cssVersion = file_exists(__DIR__ . '/assets/css/style.css') ? filemtime(__DIR__
                 <div class="flex-grow-1">
                     <h2 class="font-heading text-primary fs-3 mb-2">About the Collection</h2>
                     <div id="bioText" class="bio-collapsed text-secondary leading-relaxed">
-                        <p><?= sanitize(SITE_NAME) ?> is the personal coin collection of <?= sanitize(SITE_AUTHOR) ?>, catalogued and published as an open reference. It currently holds <strong><?= number_format($totalCoinsCount) ?> coins</strong> from <strong><?= number_format($totalCountries) ?> <?= sanitize($countryLabel) ?></strong>, covering <?= sanitize($yearRange) ?>, across <?= number_format($totalCurrencies) ?> distinct currencies.</p>
+                        <p><?= sanitize(SITE_NAME) ?> is the personal coin collection of <?= sanitize(SITE_AUTHOR) ?>, catalogued and published as an open reference. It currently holds <strong><?= number_format($totalEntries) ?> catalogued coins</strong><?= $totalEntries !== $totalCoinsCount ? ' (' . number_format($totalCoinsCount) . ' pieces in total, since some are held in multiples)' : '' ?> from <strong><?= number_format($totalCountries) ?> <?= sanitize($countryLabel) ?></strong>, covering <?= sanitize($yearRange) ?>, across <?= number_format($totalCurrencies) ?> distinct currencies.</p>
                         <p>Most of these coins were gathered over time through Wikimedia events and through exchanges with collectors in other countries. Every entry records its denomination, year of issue, mint mark, metal, weight, diameter and condition grade, and is photographed on both the obverse and reverse faces so the details can be examined directly.</p>
                         <p class="mb-0">If you would like to exchange your country's coin for Bangladeshi Taka, write to <a href="mailto:<?= sanitize(SITE_CONTACT) ?>" class="text-primary fw-bold text-decoration-none"><?= sanitize(SITE_CONTACT) ?></a>. This archive exists to preserve global numismatic history, celebrate international exchange and record unusual coinage from around the world. Nothing here is for sale.</p>
                     </div>

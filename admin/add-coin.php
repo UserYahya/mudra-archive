@@ -98,8 +98,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <title>Add Coin Entry - Mudra Archive</title>
     
     <!-- Favicons -->
-    <link rel="icon" type="image/x-icon" href="../assets/favicon.ico"/>
-    <link rel="apple-touch-icon" sizes="180x180" href="../assets/apple-touch-icon.png"/>
+    <link rel="icon" type="image/x-icon" href="/assets/favicon.ico"/>
+    <link rel="apple-touch-icon" sizes="180x180" href="/assets/apple-touch-icon.png"/>
 
     <meta name="robots" content="noindex, nofollow, noarchive"/>
 
@@ -114,7 +114,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <!-- Cropper.js CSS for Interactive Coin Cropping -->
     <link href="https://cdn.jsdelivr.net/npm/cropperjs@1.6.2/dist/cropper.min.css" rel="stylesheet"/>
     <!-- Master Custom Stylesheet -->
-    <link href="../assets/css/style.css?v=<?= file_exists(__DIR__ . '/../assets/css/style.css') ? filemtime(__DIR__ . '/../assets/css/style.css') : time() ?>" rel="stylesheet"/>
+    <link href="/assets/css/style.css?v=<?= file_exists(__DIR__ . '/../assets/css/style.css') ? filemtime(__DIR__ . '/../assets/css/style.css') : time() ?>" rel="stylesheet"/>
 </head>
 <body>
 
@@ -313,9 +313,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <!-- Cropper.js for Interactive Manual Crop Adjustments -->
     <script src="https://cdn.jsdelivr.net/npm/cropperjs@1.6.2/dist/cropper.min.js"></script>
     <!-- Client-Side Image Compressor & Auto-Cropper -->
-    <script src="../assets/js/compressor.js?v=<?= time() ?>"></script>
+    <script src="/assets/js/compressor.js?v=<?= time() ?>"></script>
     <!-- Gemini AI Smart Autofill -->
-    <script src="../assets/js/gemini-autofill.js?v=<?= time() ?>"></script>
+    <script src="/assets/js/gemini-autofill.js?v=<?= time() ?>"></script>
     <!-- Bootstrap 5 Bundle JS -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
 </body>

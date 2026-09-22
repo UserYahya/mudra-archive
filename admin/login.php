@@ -64,8 +64,8 @@ $cssVersion = file_exists(__DIR__ . '/../assets/css/style.css') ? filemtime(__DI
     <title>Admin Login - <?= sanitize(SITE_NAME) ?></title>
 
     <!-- Favicons -->
-    <link rel="icon" type="image/x-icon" href="../assets/favicon.ico"/>
-    <link rel="apple-touch-icon" sizes="180x180" href="../assets/apple-touch-icon.png"/>
+    <link rel="icon" type="image/x-icon" href="/assets/favicon.ico"/>
+    <link rel="apple-touch-icon" sizes="180x180" href="/assets/apple-touch-icon.png"/>
 
     <!-- Fonts & icon set (the icons below are Material Symbols) -->
     <link rel="preconnect" href="https://fonts.googleapis.com"/>
@@ -76,7 +76,7 @@ $cssVersion = file_exists(__DIR__ . '/../assets/css/style.css') ? filemtime(__DI
     <!-- Bootstrap 5 CSS via CDN -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet"/>
     <!-- Master Custom Stylesheet -->
-    <link href="../assets/css/style.css?v=<?= $cssVersion ?>" rel="stylesheet"/>
+    <link href="/assets/css/style.css?v=<?= $cssVersion ?>" rel="stylesheet"/>
 </head>
 <body class="d-flex align-items-center justify-content-center min-vh-100 py-5" style="background-color: var(--bg-color);">
 
@@ -85,7 +85,7 @@ $cssVersion = file_exists(__DIR__ . '/../assets/css/style.css') ? filemtime(__DI
         <div class="card border-0 shadow-lg p-4 p-md-5 rounded-4" style="background-color: #ffffff;">
 
             <div class="text-center mb-4">
-                <img src="../assets/logo.png" alt="<?= sanitize(SITE_NAME) ?>" class="mb-3" style="height: 54px; width: auto;"/>
+                <img src="/assets/logo.png" alt="<?= sanitize(SITE_NAME) ?>" class="mb-3" style="height: 54px; width: auto;"/>
                 <h1 class="font-heading text-primary fw-bold mb-1 fs-3"><?= sanitize(SITE_NAME) ?></h1>
                 <p class="text-muted small">Curator &amp; Admin Portal</p>
             </div>

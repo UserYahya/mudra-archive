@@ -40,15 +40,15 @@ $isCurator    = is_admin_logged_in();
 // Resolve obverse and reverse images
 $obvImg = get_coin_image_path($coin['obverse_image']);
 $revImg = get_coin_image_path($coin['reverse_image']);
-$hasObv = $obvImg !== 'assets/logo.png';
-$hasRev = $revImg !== 'assets/logo.png';
+$hasObv = !is_placeholder_image($obvImg);
+$hasRev = !is_placeholder_image($revImg);
 
 $coinTitle   = coin_display_title($coin);
 $seoTitle    = $coinTitle . ' | ' . SITE_NAME;
 $seoDesc     = coin_meta_description($coin);
 $summary     = coin_summary($coin);
-$fullObvUrl  = $baseUrl . '/' . $obvImg;
-$fullRevUrl  = $baseUrl . '/' . $revImg;
+$fullObvUrl  = absolute_url($obvImg, $baseUrl);
+$fullRevUrl  = absolute_url($revImg, $baseUrl);
 $relatedCoins = get_related_coins($pdo, $coin, 6);
 
 $imageAltObv = 'Obverse of ' . $coinTitle;
@@ -76,7 +76,7 @@ $specs[] = ['Pieces Held', (string)(int)$coin['quantity']];
 $images = [];
 if ($hasObv) { $images[] = $fullObvUrl; }
 if ($hasRev) { $images[] = $fullRevUrl; }
-if (!$images) { $images[] = $baseUrl . '/assets/logo.png'; }
+if (!$images) { $images[] = absolute_url(placeholder_image_path(), $baseUrl); }
 
 $additionalProperties = [];
 foreach ($specs as [$label, $value]) {

@@ -461,17 +461,43 @@ function safe_upload_name($imageFileName) {
 }
 
 /**
+ * Shown when a coin has no photograph on file.
+ */
+function placeholder_image_path() {
+    return '/assets/logo.png';
+}
+
+function is_placeholder_image($path) {
+    return $path === placeholder_image_path();
+}
+
+/**
+ * Absolute URL for a root-relative asset path, for Open Graph tags, structured
+ * data and the sitemap.
+ */
+function absolute_url($path, $baseUrl = null) {
+    $baseUrl = $baseUrl ?? get_base_url();
+    return rtrim($baseUrl, '/') . '/' . ltrim((string)$path, '/');
+}
+
+/**
  * Returns small thumbnail URL for gallery list view (max 350px, ~20KB)
  * Falls back to full image if thumbnail not generated yet.
+ *
+ * Paths are root-relative ("/assets/uploads/x.jpg"), never relative, because
+ * pages are served from more than one URL depth: the gallery sits at "/" but a
+ * coin page sits at "/coin/12-slug". A relative src resolves against the
+ * current directory, so on a coin page it became "/coin/assets/uploads/x.jpg"
+ * and every photograph broke.
  */
-function get_coin_thumbnail_path($imageFileName, $baseDir = 'assets/uploads/') {
+function get_coin_thumbnail_path($imageFileName, $baseDir = '/assets/uploads/') {
     $imageFileName = safe_upload_name($imageFileName);
-    if ($imageFileName === '') return 'assets/logo.png';
+    if ($imageFileName === '') return placeholder_image_path();
 
-    $uploadDir    = __DIR__ . '/../assets/uploads/';
-    $fullPath     = $uploadDir . $imageFileName;
-    $thumbFile    = 'thumb_' . $imageFileName;
-    $thumbPath    = $uploadDir . $thumbFile;
+    $uploadDir = __DIR__ . '/../assets/uploads/';
+    $fullPath  = $uploadDir . $imageFileName;
+    $thumbFile = 'thumb_' . $imageFileName;
+    $thumbPath = $uploadDir . $thumbFile;
 
     if (file_exists($thumbPath)) {
         return $baseDir . $thumbFile;
@@ -486,19 +512,20 @@ function get_coin_thumbnail_path($imageFileName, $baseDir = 'assets/uploads/') {
         return $baseDir . $imageFileName;
     }
 
-    return 'assets/logo.png';
+    return placeholder_image_path();
 }
 
 /**
  * Full-size image URL for a coin face, or the logo placeholder.
+ * Root-relative, for the same reason as get_coin_thumbnail_path().
  */
-function get_coin_image_path($imageFileName, $baseDir = 'assets/uploads/') {
+function get_coin_image_path($imageFileName, $baseDir = '/assets/uploads/') {
     $imageFileName = safe_upload_name($imageFileName);
-    if ($imageFileName === '') return 'assets/logo.png';
+    if ($imageFileName === '') return placeholder_image_path();
 
     return file_exists(__DIR__ . '/../assets/uploads/' . $imageFileName)
         ? $baseDir . $imageFileName
-        : 'assets/logo.png';
+        : placeholder_image_path();
 }
 
 /**

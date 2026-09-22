@@ -95,6 +95,25 @@ foreach ($specs as [$label, $value]) {
     ];
 }
 
+// Provenance is public and is unique information no other site holds, so it is
+// exposed to search and answer engines. The acquisition price is deliberately
+// never added here - structured data is read by crawlers even when a human
+// would not see it on the page.
+if (!empty($coin['acquisition_date'])) {
+    $additionalProperties[] = [
+        '@type' => 'PropertyValue',
+        'name'  => 'Acquired',
+        'value' => trim($coin['acquisition_date']),
+    ];
+}
+if (!empty($coin['source_or_seller'])) {
+    $additionalProperties[] = [
+        '@type' => 'PropertyValue',
+        'name'  => 'Source',
+        'value' => trim($coin['source_or_seller']),
+    ];
+}
+
 $creativeWork = [
     '@context'       => 'https://schema.org',
     '@type'          => 'CreativeWork',
@@ -388,26 +407,53 @@ $cssVersion = file_exists(__DIR__ . '/assets/css/style.css') ? filemtime(__DIR__
                     </section>
                 <?php endif; ?>
 
-                <!-- Acquisition record: private. Visible only to the signed-in curator,
-                     never to visitors and never to a search engine crawler. -->
+                <!-- Provenance. Acquisition date and source are public: they are
+                     genuinely useful to other collectors and are unique content no
+                     other site has. The purchase price is not, and is rendered only
+                     for the signed-in curator, so it never reaches a visitor or a
+                     crawler. -->
+                <?php
+                    $hasPublicProvenance = !empty($coin['acquisition_date']) || !empty($coin['source_or_seller']);
+                ?>
+                <?php if ($hasPublicProvenance): ?>
+                    <div class="private-details d-flex flex-wrap align-items-center gap-3 text-muted">
+                        <?php if (!empty($coin['acquisition_date'])): ?>
+                            <div class="d-flex align-items-center gap-1">
+                                <span class="material-symbols-outlined fs-6" aria-hidden="true">calendar_month</span>
+                                <span>Acquired: <?= sanitize($coin['acquisition_date']) ?></span>
+                            </div>
+                        <?php endif; ?>
+                        <?php if (!empty($coin['source_or_seller'])): ?>
+                            <div class="d-flex align-items-center gap-1">
+                                <span class="material-symbols-outlined fs-6" aria-hidden="true">storefront</span>
+                                <span>Source: <?= sanitize($coin['source_or_seller']) ?></span>
+                            </div>
+                        <?php endif; ?>
+                    </div>
+                <?php endif; ?>
+
                 <?php if ($isCurator): ?>
-                    <div class="private-details d-flex flex-wrap justify-content-between align-items-center gap-3 text-muted">
+                    <div class="private-details d-flex flex-wrap align-items-center gap-3 text-muted mt-2">
                         <div class="d-flex align-items-center gap-1">
                             <span class="material-symbols-outlined fs-6" aria-hidden="true">visibility_off</span>
                             <span class="fw-bold">Curator only</span>
                         </div>
                         <div class="d-flex align-items-center gap-1">
-                            <span class="material-symbols-outlined fs-6" aria-hidden="true">calendar_month</span>
-                            <span>Acquired: <?= sanitize($coin['acquisition_date'] ?: 'Not recorded') ?></span>
-                        </div>
-                        <div class="d-flex align-items-center gap-1">
-                            <span class="material-symbols-outlined fs-6" aria-hidden="true">storefront</span>
-                            <span>Source: <?= sanitize($coin['source_or_seller'] ?: 'Not recorded') ?></span>
-                        </div>
-                        <div class="d-flex align-items-center gap-1">
                             <span class="material-symbols-outlined fs-6" aria-hidden="true">lock</span>
                             <span>Cost: <?= sanitize(format_currency($coin['acquisition_price'])) ?></span>
                         </div>
+                        <?php if (empty($coin['acquisition_date'])): ?>
+                            <div class="d-flex align-items-center gap-1">
+                                <span class="material-symbols-outlined fs-6" aria-hidden="true">calendar_month</span>
+                                <span>Acquired: not recorded</span>
+                            </div>
+                        <?php endif; ?>
+                        <?php if (empty($coin['source_or_seller'])): ?>
+                            <div class="d-flex align-items-center gap-1">
+                                <span class="material-symbols-outlined fs-6" aria-hidden="true">storefront</span>
+                                <span>Source: not recorded</span>
+                            </div>
+                        <?php endif; ?>
                         <a href="/admin/edit-coin.php?id=<?= (int)$coin['id'] ?>" class="btn btn-sm btn-outline-archival d-inline-flex align-items-center gap-1">
                             <span class="material-symbols-outlined fs-6" aria-hidden="true">edit</span>
                             <span>Edit entry</span>

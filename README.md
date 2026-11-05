@@ -29,10 +29,10 @@ Live instance: <https://mudra.yahya.bd>
 
 - Gallery of the collection with 3D flip cards showing obverse and reverse
 - Search and filtering by country, currency, grade, year range and featured status
-- An interactive world map (Leaflet + OpenStreetMap) pinning every country represented
+- An interactive world atlas: an Equal Earth map, drawn from a local SVG, with every country in the collection in gold (deeper gold for more coins), region presets, pan and zoom, and a card per country showing its coins, or an exchange invitation for countries not yet collected
 - Live statistics: total coins, countries, currencies, era span
-- A detail page per coin with a full specification table and related entries
-- Dark mode, responsive down to phone width
+- A detail page per coin with an obverse/reverse viewer and magnifying loupe, a full specification table and related entries
+- Light (parchment) and dark (ink) themes that follow the visitor's system setting, responsive down to phone width
 
 **Admin side** (`/admin/`)
 
@@ -51,7 +51,7 @@ Live instance: <https://mudra.yahya.bd>
 | Web server | Apache with `mod_rewrite`. `mod_headers`, `mod_deflate` and `mod_expires` are used when available but not required |
 | Database | SQLite 3 — the file is created automatically on first request |
 
-No Composer dependencies. Bootstrap, Leaflet and Google Fonts load from public CDNs.
+No Composer dependencies. Bootstrap and Google Fonts load from public CDNs; the world map is a local SVG and needs no mapping library or tile server.
 
 ---
 
@@ -77,7 +77,7 @@ See **[DEPLOYMENT.md](DEPLOYMENT.md)** for the full cPanel walkthrough, includin
 
 The short version:
 
-1. Upload everything **except** `_private/`, `router.php` and `start_local_server.bat`, keeping hidden `.htaccess` files.
+1. Upload everything **except** `_private/`, `tools/`, `router.php` and `start_local_server.bat`, keeping hidden `.htaccess` files.
 2. Make `database/` and `assets/uploads/` writable by the web server.
 3. Confirm `pdo_sqlite` and `gd` are enabled.
 4. Open the site once — the schema is created automatically.
@@ -157,7 +157,7 @@ That directory is denied over HTTP, so the file is only readable over FTP/SSH or
 - **Real 404s** for missing coins, rather than a redirect to the homepage.
 - **Answer-engine friendly** — each coin page opens with a self-contained factual sentence and presents its specifications as a real `<table>`; the homepage answers common questions in visible text backed by matching `FAQPage` markup.
 - **Sitemap** at `/sitemap.xml`, with the Google image extension so both faces of every coin are eligible for Google Images.
-- **Performance** — Leaflet loads only when the map nears the viewport, the LCP image is preloaded with `fetchpriority="high"`, scripts are deferred, and `.htaccess` enables compression and long-lived asset caching.
+- **Performance** — the world map (about 40 KB gzipped) loads only when it nears the viewport, the icon font is subset to the icons actually used (about 6 KB instead of 4 MB), the LCP image is preloaded with `fetchpriority="high"`, scripts are deferred, and `.htaccess` enables compression and long-lived asset caching.
 - `robots.txt` names the major search and AI answer crawlers explicitly. Note that a named group *replaces* the `*` group for that crawler rather than adding to it, so every named group repeats the same `Disallow` rules.
 
 ---
@@ -176,6 +176,7 @@ That directory is denied over HTTP, so the file is only readable over FTP/SSH or
 ├── site.webmanifest
 ├── includes/
 │   ├── config.php          Site identity, canonical host, tunables
+│   ├── layout.php          Shared header, footer, icon font and theme script
 │   ├── security.php        Sessions, CSRF, headers, login throttling
 │   ├── db.php              Connection, schema, indexes, first-run seeding
 │   ├── functions.php       URL, SEO text, image and query helpers
@@ -186,10 +187,15 @@ That directory is denied over HTTP, so the file is only readable over FTP/SSH or
 │   └── add-coin.php  edit-coin.php  delete-coin.php
 ├── assets/
 │   ├── css/style.css
+│   ├── img/atlas.svg            World map, Equal Earth projection (built by tools/)
+│   ├── img/guilloche.svg        Banknote-style rosette artwork
+│   ├── js/site.js               Theme, navigation, coin flips, coin viewer
+│   ├── js/atlas.js              Interactive world map
 │   ├── js/compressor.js         Client-side compression before upload
 │   ├── js/gemini-autofill.js    Optional AI autofill (key stays in the browser)
 │   └── uploads/.htaccess        No script execution in the upload directory
-└── database/.htaccess           Deny direct HTTP access
+├── database/.htaccess           Deny direct HTTP access
+└── tools/                       Local scripts that generate the map, rosette and icons
 ```
 
 Not in this repository, by design: the SQLite database, uploaded coin photographs, and any credential file. See [`.gitignore`](.gitignore).
@@ -202,6 +208,7 @@ Not in this repository, by design: the SQLite database, uploaded coin photograph
 - Public-facing counts must go through `public_coins_filter()` so the gallery, statistics and map cannot disagree.
 - Acquisition price, source and date are private. Anything rendering them must be behind `is_admin_logged_in()`.
 - Site-wide strings belong in `includes/config.php`, not inline.
+- The public pages load a subset of Material Symbols. A new icon on a public page needs its name added to `icon_font_url()` in `includes/layout.php`.
 - Every state-changing form needs `csrf_field()`, and its handler needs `csrf_require()`.
 - The codebase targets PHP 7.4, so no `str_contains`, `match` expressions, nullsafe operators or named arguments.
 

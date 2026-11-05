@@ -43,10 +43,14 @@ Both are additive and reversible. No existing table, column or row is modified.
    404.php           index.php         robots.txt        sitemap.php
    coin.php          site.webmanifest  .htaccess
    admin/            includes/         assets/css/       assets/js/
-   assets/logo.png   assets/favicon.ico   assets/favicon-32x32.png
-   assets/apple-touch-icon.png
+   assets/img/       assets/logo.png   assets/logo-128.png
+   assets/favicon.ico   assets/favicon-32x32.png   assets/apple-touch-icon.png
    assets/uploads/.htaccess    database/.htaccess
    ```
+
+   `assets/img/` holds the world map (`atlas.svg`) and the guilloche rosette;
+   `includes/layout.php` is the shared header and footer. Both are new in the
+   redesign, so make sure they are included.
 
    > **Enable "Show Hidden Files" in cPanel File Manager** (Settings, top right), or the `.htaccess` files will be skipped silently. They carry the URL rewrites and much of the security hardening.
 
@@ -59,6 +63,7 @@ Both are additive and reversible. No existing table, column or row is modified.
    | `router.php` | Local development server only; Apache uses `.htaccess` |
    | `start_local_server.bat` | Local development only |
    | `_private/` | Local quarantine folder — must never be web-accessible |
+   | `tools/` | Asset build scripts, run locally only |
    | `README.md`, `DEPLOYMENT.md`, `.gitignore` | Documentation and tooling |
 
 4. **Delete these from the server if they are still there.** They were publicly downloadable and are a live security exposure:
@@ -96,7 +101,7 @@ In cPanel, go to **Domains → Subdomains** (or **Addon Domains**), create the h
 
 ### 2. Upload the files
 
-Upload everything from this repository **except** `_private/`, `router.php`, `start_local_server.bat`, `README.md`, `DEPLOYMENT.md` and `.gitignore`, preserving the folder structure and the hidden `.htaccess` files.
+Upload everything from this repository **except** `_private/`, `tools/`, `router.php`, `start_local_server.bat`, `README.md`, `DEPLOYMENT.md` and `.gitignore`, preserving the folder structure and the hidden `.htaccess` files.
 
 ### 3. Set permissions
 
@@ -136,7 +141,7 @@ Read that file over FTP/SSH or in File Manager — it is not reachable over HTTP
 - [ ] Old `coin.php?id=N` links return a 301 to the clean URL
 - [ ] A non-existent coin returns a real 404, not a redirect
 - [ ] `/sitemap.xml` and `/robots.txt` load
-- [ ] The world map renders (it loads as you scroll to it)
+- [ ] The world map renders (it loads as you scroll to it) and the countries in the collection are gold
 - [ ] Sign in, add, edit and delete all work
 
 **Secure**
@@ -181,7 +186,10 @@ The database could not be opened — nearly always permissions on `database/`. M
 `assets/uploads/` is not writable, or `gd` is not enabled.
 
 **Icons show as words like `dashboard` or `delete`**
-The Material Symbols font did not load. Check that the page is not blocked from reaching `fonts.googleapis.com`.
+The Material Symbols font did not load. Check that the page is not blocked from reaching `fonts.googleapis.com`. On the public pages only the icons listed in `icon_font_url()` in `includes/layout.php` are downloaded (about 6 KB instead of 4 MB), so an icon newly added to a public page also needs its name added to that list.
+
+**The world map stays on "Loading map…"**
+`assets/img/atlas.svg` is missing from the server, or is being served with the wrong type. Open `/assets/img/atlas.svg` directly: it should display as a picture, not as text or a 404.
 
 **Signed out constantly**
 `ADMIN_IDLE_TIMEOUT` in `includes/config.php` is two hours by default. The session is also bound to your browser's user-agent string, so switching browsers ends the session.

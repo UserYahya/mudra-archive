@@ -100,7 +100,7 @@ function get_country_iso_code($countryName) {
 /**
  * Master Country Geocoding Matrix (Smart Multi-Tier Matcher with Substring & Parentheses Support)
  */
-function get_country_coordinates($countryName) {
+function get_country_coordinates($countryName, $allowFallback = true) {
     if (empty($countryName)) return null;
 
     $raw = trim($countryName);
@@ -257,7 +257,11 @@ function get_country_coordinates($countryName) {
         }
     }
 
-    // 4. Default fallback hash
+    // 4. Default fallback hash. It places an unknown name at an arbitrary
+    //    position, so callers that draw a map pass $allowFallback = false.
+    if (!$allowFallback) {
+        return null;
+    }
     $hash = crc32($clean);
     $lat = (($hash % 100) / 100) * 100 - 30;
     $lng = ((($hash >> 8) % 100) / 100) * 300 - 150;

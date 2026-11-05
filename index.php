@@ -2,6 +2,7 @@
 // index.php - Mudra Archive Personal Digital Numismatic Museum & Public Collection
 require_once __DIR__ . '/includes/db.php';
 require_once __DIR__ . '/includes/functions.php';
+require_once __DIR__ . '/includes/layout.php';
 
 send_security_headers();
 
@@ -196,23 +197,16 @@ $socialDims = image_dimensions($socialPath);
 $prevUrl = $page > 1 ? $baseUrl . home_url($currentFilters + ($page - 1 > 1 ? ['page' => $page - 1] : [])) : null;
 $nextUrl = $page < $totalPages ? $baseUrl . home_url($currentFilters + ['page' => $page + 1]) : null;
 
-// Coordinates mapping guaranteeing 100% of collection countries are plotted accurately
-$leafletMarkers = [];
-foreach ($countryCounts as $cc) {
-    $cName = $cc['country'];
-    $cnt = $cc['count'];
-    $coords = get_country_coordinates($cName);
-    if ($coords) {
-        $leafletMarkers[] = [
-            'country' => $cName,
-            'count' => $cnt,
-            'lat' => $coords[0],
-            'lng' => $coords[1]
-        ];
-    }
-}
+// Atlas: per-country coin counts, ISO codes and sample coins for the world map.
+// The share of the world is counted by distinct modern ISO codes, so a
+// historical issuer such as the Soviet Union does not inflate it.
+$atlasItems = get_atlas_payload($pdo, $countryCounts);
+$atlasIsos  = array_unique(array_filter(array_column($countryCounts, 'iso')));
+$atlasPct   = min(100, (int)round(count($atlasIsos) / 195 * 100));
+$atlasMax   = $countryCounts ? max(1, max(array_column($countryCounts, 'count'))) : 1;
 
-$cssVersion = file_exists(__DIR__ . '/assets/css/style.css') ? filemtime(__DIR__ . '/assets/css/style.css') : time();
+// Hero showcase: the first coin takes the centre of the orbit, the rest circle it.
+$orbitSlots = ['main', 's1', 's2', 's3'];
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -220,7 +214,8 @@ $cssVersion = file_exists(__DIR__ . '/assets/css/style.css') ? filemtime(__DIR__
     <meta charset="utf-8"/>
     <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
     <meta name="robots" content="<?= sanitize($robotsDirective) ?>"/>
-    <meta name="theme-color" content="#1e293b"/>
+    <meta name="theme-color" content="#f6f1e7"/>
+    <?= theme_boot_script() ?>
 
     <!-- Primary SEO Meta Tags -->
     <title><?= sanitize($pageTitle) ?></title>
@@ -254,338 +249,13 @@ $cssVersion = file_exists(__DIR__ . '/assets/css/style.css') ? filemtime(__DIR__
     <meta name="twitter:image" content="<?= sanitize($socialUrl) ?>"/>
     <meta name="twitter:image:alt" content="Coins from the <?= sanitize(SITE_NAME) ?> collection"/>
 
-    <!-- Early Theme & Safety Inline Resets -->
-    <script>
-        (function() {
-            const savedTheme = localStorage.getItem('mudra_theme');
-            if (savedTheme) {
-                document.documentElement.setAttribute('data-theme', savedTheme);
-            }
-        })();
-
-        // Global UI Functions registered immediately
-        function toggleTheme() {
-            const currentTheme = document.documentElement.getAttribute('data-theme') || 'light';
-            const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
-            document.documentElement.setAttribute('data-theme', newTheme);
-            localStorage.setItem('mudra_theme', newTheme);
-            updateThemeIcon(newTheme);
-        }
-
-        function updateThemeIcon(theme) {
-            const icon = document.getElementById('themeIcon');
-            if (icon) {
-                icon.innerText = theme === 'dark' ? 'light_mode' : 'dark_mode';
-            }
-        }
-
-        function toggleMobileNav(e) {
-            if (e) {
-                e.preventDefault();
-                e.stopPropagation();
-            }
-            const nav = document.getElementById('mobileNavMenu');
-            if (nav) {
-                nav.classList.toggle('show');
-                nav.classList.toggle('active');
-            }
-        }
-
-        function closeMobileNav() {
-            const nav = document.getElementById('mobileNavMenu');
-            if (nav) {
-                nav.classList.remove('show');
-                nav.classList.remove('active');
-            }
-        }
-
-        function toggleCoinFlip(el, e) {
-            if (!el) return;
-            const flipper = el.querySelector('.coin-3d-flipper.has-reverse');
-            if (flipper) {
-                flipper.classList.toggle('flipped');
-            }
-        }
-
-        function toggleBio() {
-            const bioText = document.getElementById('bioText');
-            const toggleBtn = document.getElementById('bioToggleBtn');
-            const toggleIcon = document.getElementById('bioToggleIcon');
-
-            if (bioText.classList.contains('bio-collapsed')) {
-                bioText.classList.remove('bio-collapsed');
-                toggleBtn.querySelector('span').innerText = 'Show Less';
-                toggleIcon.innerText = 'expand_less';
-            } else {
-                bioText.classList.add('bio-collapsed');
-                toggleBtn.querySelector('span').innerText = 'Show Full Details';
-                toggleIcon.innerText = 'expand_more';
-            }
-        }
-
-        function toggleMobileFilters(e) {
-            if (e) e.preventDefault();
-            const panel = document.getElementById('mobileFilterPanel');
-            if (panel) {
-                panel.classList.toggle('show');
-                panel.classList.toggle('active');
-                if (panel.classList.contains('active') || panel.classList.contains('show')) {
-                    panel.scrollIntoView({ behavior: 'smooth' });
-                }
-            }
-        }
-    </script>
-
-    <!-- Critical Overriding Layout Styles (Immune to Browser Caching) -->
-    <style>
-        html { scroll-behavior: smooth; }
-        #collection, #countriesMap, #statistics, #about { scroll-margin-top: 80px; }
-        #mobileNavMenu { display: none !important; }
-        #mobileNavMenu.show, #mobileNavMenu.active { display: block !important; }
-        #mobileFilterPanel { display: none !important; }
-        #mobileFilterPanel.show, #mobileFilterPanel.active { display: block !important; }
-        #leafletMap { height: 420px; width: 100%; border-radius: 12px; z-index: 1; transition: height 0.3s ease; }
-
-        /* Fanned Overlapping Museum Coin Deck */
-        .hero-coin-stack {
-            position: relative !important;
-            height: 140px !important;
-            width: 100% !important;
-            display: flex !important;
-            align-items: center !important;
-            justify-content: center !important;
-            margin: 0.5rem 0 !important;
-        }
-
-        .hero-coin-link {
-            position: absolute !important;
-            width: 90px !important;
-            height: 90px !important;
-            border-radius: 50% !important;
-            display: block !important;
-            transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.3s ease !important;
-            cursor: pointer !important;
-            text-decoration: none !important;
-            -webkit-tap-highlight-color: transparent;
-        }
-
-        .hero-coin-link img,
-        .hero-coin-card {
-            width: 100% !important;
-            height: 100% !important;
-            border-radius: 50% !important;
-            background-color: #ffffff !important;
-            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.28) !important;
-            border: 3px solid #ffffff !important;
-            object-fit: cover !important;
-            display: block !important;
-        }
-
-        [data-theme="dark"] .hero-coin-link img,
-        [data-theme="dark"] .hero-coin-card {
-            border-color: #334155 !important;
-            background-color: #1e293b !important;
-            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.6) !important;
-        }
-
-        /* Overlapping fanned positions */
-        .hero-coin-stack > .hero-coin-link:nth-child(1),
-        .hero-coin-stack > *:nth-child(1) {
-            transform: translateX(-55px) rotate(-10deg) !important;
-            z-index: 1 !important;
-        }
-
-        .hero-coin-stack > .hero-coin-link:nth-child(2),
-        .hero-coin-stack > *:nth-child(2) {
-            transform: translateX(-18px) rotate(-3deg) !important;
-            z-index: 2 !important;
-        }
-
-        .hero-coin-stack > .hero-coin-link:nth-child(3),
-        .hero-coin-stack > *:nth-child(3) {
-            transform: translateX(18px) rotate(4deg) !important;
-            z-index: 3 !important;
-        }
-
-        .hero-coin-stack > .hero-coin-link:nth-child(4),
-        .hero-coin-stack > *:nth-child(4) {
-            transform: translateX(55px) rotate(11deg) !important;
-            z-index: 4 !important;
-        }
-
-        @media (min-width: 768px) {
-            .hero-coin-stack {
-                height: 165px !important;
-                margin: 0 !important;
-            }
-            .hero-coin-link {
-                width: 120px !important;
-                height: 120px !important;
-            }
-            .hero-coin-link img,
-            .hero-coin-card {
-                border-width: 4px !important;
-            }
-            .hero-coin-stack > .hero-coin-link:nth-child(1),
-            .hero-coin-stack > *:nth-child(1) { transform: translateX(-80px) rotate(-10deg) !important; }
-            .hero-coin-stack > .hero-coin-link:nth-child(2),
-            .hero-coin-stack > *:nth-child(2) { transform: translateX(-26px) rotate(-3deg) !important; }
-            .hero-coin-stack > .hero-coin-link:nth-child(3),
-            .hero-coin-stack > *:nth-child(3) { transform: translateX(26px) rotate(4deg) !important; }
-            .hero-coin-stack > .hero-coin-link:nth-child(4),
-            .hero-coin-stack > *:nth-child(4) { transform: translateX(80px) rotate(11deg) !important; }
-
-            .hero-coin-stack:hover > .hero-coin-link:nth-child(1),
-            .hero-coin-stack:hover > *:nth-child(1) { transform: translateX(-120px) rotate(-14deg) scale(1.08) !important; z-index: 10 !important; }
-            .hero-coin-stack:hover > .hero-coin-link:nth-child(2),
-            .hero-coin-stack:hover > *:nth-child(2) { transform: translateX(-40px) rotate(-4deg) scale(1.08) !important; z-index: 11 !important; }
-            .hero-coin-stack:hover > .hero-coin-link:nth-child(3),
-            .hero-coin-stack:hover > *:nth-child(3) { transform: translateX(40px) rotate(5deg) scale(1.08) !important; z-index: 12 !important; }
-            .hero-coin-stack:hover > .hero-coin-link:nth-child(4),
-            .hero-coin-stack:hover > *:nth-child(4) { transform: translateX(120px) rotate(15deg) scale(1.08) !important; z-index: 13 !important; }
-        }
-
-        /* 3D Coin Scene in Gallery Grid */
-        .coin-3d-scene {
-            width: 100% !important;
-            max-width: 175px !important;
-            aspect-ratio: 1 / 1 !important;
-            perspective: 1000px !important;
-            margin: 0 auto 0.85rem auto !important;
-            position: relative !important;
-            cursor: pointer !important;
-            -webkit-tap-highlight-color: transparent !important;
-            touch-action: manipulation !important;
-        }
-
-        .coin-3d-flipper {
-            position: relative !important;
-            width: 100% !important;
-            height: 100% !important;
-            transform-style: preserve-3d !important;
-            transition: transform 0.65s cubic-bezier(0.4, 0, 0.2, 1) !important;
-            border-radius: 50% !important;
-            will-change: transform !important;
-        }
-
-        .coin-card:hover .coin-3d-flipper.has-reverse,
-        .coin-3d-flipper.has-reverse.flipped {
-            transform: rotateY(180deg) !important;
-        }
-
-        .coin-face {
-            position: absolute !important;
-            inset: 0 !important;
-            width: 100% !important;
-            height: 100% !important;
-            -webkit-backface-visibility: hidden !important;
-            backface-visibility: hidden !important;
-            border-radius: 50% !important;
-            background-color: #ffffff !important;
-            box-shadow: 0 6px 18px rgba(0, 0, 0, 0.12) !important;
-            border: 2px solid #ffffff !important;
-            display: flex !important;
-            align-items: center !important;
-            justify-content: center !important;
-            overflow: hidden !important;
-            transform: translateZ(0) !important;
-        }
-
-        [data-theme="dark"] .coin-face {
-            background-color: #1e293b !important;
-            border-color: #334155 !important;
-            box-shadow: 0 6px 18px rgba(0, 0, 0, 0.5) !important;
-        }
-
-        .coin-face img {
-            width: 100% !important;
-            height: 100% !important;
-            object-fit: cover !important;
-            border-radius: 50% !important;
-            display: block !important;
-        }
-
-        .coin-face-obv { transform: rotateY(0deg) !important; }
-        .coin-face-rev { transform: rotateY(180deg) !important; }
-
-        .coin-card-material {
-            font-size: 0.72rem !important;
-            font-weight: 600 !important;
-            padding: 1px 7px !important;
-            border-radius: 8px !important;
-            text-transform: uppercase !important;
-            letter-spacing: 0.03em !important;
-            display: inline-block !important;
-        }
-
-        .badge-metal-silver, .coin-card-material.badge-metal-silver { background-color: #f1f5f9 !important; color: #1e293b !important; border: 1px solid #cbd5e1 !important; }
-        [data-theme="dark"] .badge-metal-silver, [data-theme="dark"] .coin-card-material.badge-metal-silver { background-color: #334155 !important; color: #f8fafc !important; border-color: #475569 !important; }
-
-        .badge-metal-gold, .coin-card-material.badge-metal-gold { background-color: #fef9c3 !important; color: #713f12 !important; border: 1px solid #facc15 !important; }
-        [data-theme="dark"] .badge-metal-gold, [data-theme="dark"] .coin-card-material.badge-metal-gold { background-color: #713f12 !important; color: #fef08a !important; border-color: #a16207 !important; }
-
-        .badge-metal-copper, .coin-card-material.badge-metal-copper { background-color: #ffedd5 !important; color: #7c2d12 !important; border: 1px solid #fdba74 !important; }
-        [data-theme="dark"] .badge-metal-copper, [data-theme="dark"] .coin-card-material.badge-metal-copper { background-color: #431407 !important; color: #fdba74 !important; border-color: #7c2d12 !important; }
-
-        .badge-metal-default, .coin-card-material.badge-metal-default { background-color: #f8fafc !important; color: #334155 !important; border: 1px solid #cbd5e1 !important; }
-        [data-theme="dark"] .badge-metal-default, [data-theme="dark"] .coin-card-material.badge-metal-default { background-color: #1e293b !important; color: #f1f5f9 !important; border-color: #334155 !important; }
-
-        /* Full Screen Map View */
-        #countriesMap:fullscreen,
-        #countriesMap:-webkit-full-screen,
-        .map-fullscreen-active {
-            width: 100vw !important;
-            height: 100vh !important;
-            max-width: 100vw !important;
-            margin: 0 !important;
-            padding: 1.25rem !important;
-            border-radius: 0 !important;
-            display: flex !important;
-            flex-direction: column !important;
-            overflow-y: auto !important;
-            background-color: var(--surface-bright) !important;
-            z-index: 99999 !important;
-        }
-
-        #countriesMap:fullscreen #leafletMap,
-        #countriesMap:-webkit-full-screen #leafletMap,
-        .map-fullscreen-active #leafletMap {
-            flex-grow: 1 !important;
-            height: calc(100vh - 180px) !important;
-            min-height: 450px !important;
-        }
-    </style>
-
-    <!-- Resource Preconnect & Font Links -->
-    <link rel="preconnect" href="https://fonts.googleapis.com"/>
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin=""/>
-    <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin=""/>
-    <link rel="dns-prefetch" href="https://unpkg.com"/>
-    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400..900;1,400..900&family=Source+Sans+3:ital,wght@0,300..900;1,300..900&display=swap" rel="stylesheet"/>
-    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200"/>
+    <?php render_head_assets(); ?>
 
     <?php if (!empty($heroCoins)): ?>
-        <!-- Preload the first hero coin: it is the largest element painted above
+        <!-- Preload the centre hero coin: it is the largest element painted above
              the fold, and LCP is a ranking signal. -->
         <link rel="preload" as="image" href="<?= sanitize(get_coin_thumbnail_path($heroCoins[0]['obverse_image'])) ?>" fetchpriority="high"/>
     <?php endif; ?>
-
-    <!-- Favicons & PWA manifest -->
-    <link rel="icon" type="image/x-icon" href="/assets/favicon.ico"/>
-    <link rel="icon" type="image/png" sizes="32x32" href="/assets/favicon-32x32.png"/>
-    <link rel="apple-touch-icon" sizes="180x180" href="/assets/apple-touch-icon.png"/>
-    <link rel="manifest" href="/site.webmanifest"/>
-
-    <!-- Bootstrap 5 CSS via CDN -->
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet"/>
-    <!-- Master Custom Stylesheet (with dynamic cache buster) -->
-    <link href="/assets/css/style.css?v=<?= $cssVersion ?>" rel="stylesheet"/>
-
-    <!-- Leaflet's CSS and JS are fetched only when the map scrolls into view
-         (see the loader at the end of <body>), so they cost nothing on first paint. -->
-    <link rel="preload" as="style" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" onload="this.rel='stylesheet'"/>
-    <noscript><link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/></noscript>
-
     <?php
     // --- Structured data ---------------------------------------------------
     // A connected graph (site -> curator -> collection -> the coins on this page)
@@ -707,228 +377,196 @@ $cssVersion = file_exists(__DIR__ . '/assets/css/style.css') ? filemtime(__DIR__
     }
     ?>
 </head>
-<body>
+<body class="page-home">
 
-    <!-- Header Navigation with Solid Mobile Menu & Dark Mode Toggle -->
-    <header class="app-header px-3 px-md-4 sticky-top border-bottom shadow-sm position-relative">
-        <div class="container-fluid max-w-container-max p-0">
-            <div class="d-flex justify-content-between align-items-center py-2">
-                <a href="/" class="d-flex align-items-center gap-2 text-decoration-none">
-                    <img src="/assets/logo.png" alt="Mudra Archive Logo" class="nav-logo-img" width="38" height="38"/>
-                    <span class="brand-title">Mudra Archive</span>
-                </a>
+    <?php render_site_header(true); ?>
 
-                <!-- Desktop Links (Collection, Countries, Statistics, About) -->
-                <nav class="d-none d-md-flex align-items-center gap-4">
-                    <a href="#collection" class="text-secondary text-decoration-none font-label-archival fw-bold">Collection</a>
-                    <a href="#countriesMap" class="text-secondary text-decoration-none font-label-archival fw-bold">Countries</a>
-                    <a href="#statistics" class="text-secondary text-decoration-none font-label-archival fw-bold">Statistics</a>
-                    <a href="#about" class="text-secondary text-decoration-none font-label-archival fw-bold">About</a>
-                </nav>
+    <main id="main">
 
-                <div class="d-flex align-items-center gap-2">
-                    <!-- Dark Mode Toggle Button -->
-                    <button id="themeToggle" class="btn btn-outline-archival p-2 d-flex align-items-center justify-content-center" onclick="toggleTheme()" aria-label="Toggle Dark Mode">
-                        <span id="themeIcon" class="material-symbols-outlined">dark_mode</span>
-                    </button>
+        <!-- SECTION 1: Hero - the vault display case -->
+        <div class="wrap hero-shell">
+            <section class="hero vault vault-grain" aria-labelledby="hero-title">
+                <span class="rosette" aria-hidden="true"></span>
+                <div class="hero-grid">
+                    <div class="hero-copy">
+                        <p class="hero-eyebrow">
+                            <span>Digital Numismatic Museum</span>
+                            <span class="dot" aria-hidden="true"></span>
+                            <span lang="bn">মুদ্রা আর্কাইভ</span>
+                        </p>
+                        <h1 id="hero-title" class="hero-title"><?= sanitize(SITE_NAME) ?></h1>
+                        <p class="hero-lead">An evolving personal collection of coins from around the world, catalogued in detail and photographed on both faces.</p>
 
-                    <!-- Mobile Hamburger Button -->
-                    <button class="btn btn-outline-archival d-md-none p-2 d-flex align-items-center justify-content-center" type="button" onclick="toggleMobileNav(event)" aria-label="Toggle Navigation Menu">
-                        <span class="material-symbols-outlined fs-4">menu</span>
-                    </button>
-
-                    <?php if (is_admin_logged_in()): ?>
-                        <a href="admin/dashboard.php" class="btn btn-sm btn-outline-archival d-none d-md-inline-flex align-items-center gap-1">
-                            <span class="material-symbols-outlined fs-6">dashboard</span>
-                            <span>Dashboard</span>
-                        </a>
-                    <?php endif; ?>
-                </div>
-            </div>
-
-            <!-- Fixed Dropdown Mobile Navigation Menu (100% Opaque Solid Background) -->
-            <div id="mobileNavMenu" class="d-md-none">
-                <div class="d-flex flex-column gap-2">
-                    <a href="#collection" onclick="closeMobileNav()" class="btn btn-outline-archival text-start d-flex align-items-center gap-2 py-2">
-                        <span class="material-symbols-outlined">grid_view</span>
-                        <span>Collection</span>
-                    </a>
-                    <a href="#countriesMap" onclick="closeMobileNav()" class="btn btn-outline-archival text-start d-flex align-items-center gap-2 py-2">
-                        <span class="material-symbols-outlined">public</span>
-                        <span>Countries Map</span>
-                    </a>
-                    <a href="#statistics" onclick="closeMobileNav()" class="btn btn-outline-archival text-start d-flex align-items-center gap-2 py-2">
-                        <span class="material-symbols-outlined">analytics</span>
-                        <span>Statistics</span>
-                    </a>
-                    <a href="#about" onclick="closeMobileNav()" class="btn btn-outline-archival text-start d-flex align-items-center gap-2 py-2">
-                        <span class="material-symbols-outlined">info</span>
-                        <span>About the Archive</span>
-                    </a>
-                    <?php if (is_admin_logged_in()): ?>
-                        <a href="admin/dashboard.php" class="btn btn-primary-archival text-start d-flex align-items-center gap-2 mt-1 py-2">
-                            <span class="material-symbols-outlined">dashboard</span>
-                            <span>Admin Dashboard</span>
-                        </a>
-                    <?php endif; ?>
-                </div>
-            </div>
-        </div>
-    </header>
-
-    <!-- Main Content Canvas -->
-    <main class="flex-grow-1 py-4 px-3 px-md-4 container-lg">
-
-        <!-- SECTION 1: Personal Museum Hero Section -->
-        <section class="museum-hero mb-4 shadow-sm">
-            <div class="row align-items-center g-3 g-md-4">
-                <div class="col-12 col-md-7">
-                    <span class="badge bg-primary-subtle text-primary border border-primary-subtle px-3 py-1 rounded-pill mb-2 font-label-archival">Digital Numismatic Museum</span>
-                    <h1 class="display-5 font-heading text-primary fw-bold mb-2">Mudra Archive</h1>
-                    <p class="fs-5 text-secondary leading-relaxed mb-3">
-                        An evolving personal collection of coins from around the world.
-                    </p>
-
-                    <!-- Dynamic 4-Metric Museum Statistics Grid (Coins, Countries, Currencies, Era Span) -->
-                    <div id="statistics" class="row row-cols-2 row-cols-md-4 g-2 g-md-3">
-                        <div class="col">
-                            <div class="stat-pill" title="<?= number_format($totalCoinsCount) ?> pieces held across <?= number_format($totalEntries) ?> catalogue entries">
-                                <div class="stat-pill-label">Coins</div>
-                                <div class="stat-pill-value text-primary"><?= number_format($totalCoinsCount) ?></div>
-                                <?php if ($totalEntries !== $totalCoinsCount): ?>
-                                    <!-- Pieces held and catalogue entries are different numbers whenever
-                                         a coin is held in multiples. Both were previously labelled
-                                         "coins", which read as a contradiction against the gallery. -->
-                                    <div class="stat-pill-note"><?= number_format($totalEntries) ?> entries</div>
-                                <?php endif; ?>
-                            </div>
-                        </div>
-                        <div class="col">
-                            <div class="stat-pill">
-                                <div class="stat-pill-label">Countries</div>
-                                <div class="stat-pill-value text-secondary"><?= number_format($totalCountries) ?></div>
-                            </div>
-                        </div>
-                        <div class="col">
-                            <div class="stat-pill">
-                                <div class="stat-pill-label">Currencies</div>
-                                <div class="stat-pill-value"><?= number_format($totalCurrencies) ?></div>
-                            </div>
-                        </div>
-                        <div class="col">
-                            <div class="stat-pill">
-                                <div class="stat-pill-label">Era Span</div>
-                                <div class="stat-pill-value text-success" title="<?= sanitize($yearRange) ?>"><?= sanitize($yearRange) ?></div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Visual Coin Composition Showcase (Fanned Overlapping Museum Coin Deck) -->
-                <div class="col-12 col-md-5">
-                    <div class="hero-coin-stack">
-                        <?php foreach ($heroCoins as $hIndex => $hc): ?>
-                            <?php
-                                $hThumb = get_coin_thumbnail_path($hc['obverse_image']);
-                                $hTitle = coin_display_title($hc);
-                            ?>
-                            <a href="<?= sanitize(coin_path($hc)) ?>" class="hero-coin-link" title="<?= sanitize($hTitle) ?>">
-                                <img src="<?= sanitize($hThumb) ?>" alt="<?= sanitize($hTitle) ?>" class="hero-coin-card"
-                                     width="120" height="120" loading="eager" decoding="async"
-                                     <?= $hIndex === 0 ? 'fetchpriority="high"' : '' ?>/>
+                        <div class="hero-actions">
+                            <a href="#collection" class="btn-x btn-gold">
+                                <span>Explore the collection</span>
+                                <span class="material-symbols-outlined" aria-hidden="true">arrow_downward</span>
                             </a>
-                        <?php endforeach; ?>
+                            <a href="#countriesMap" class="btn-x btn-ghost-light">
+                                <span class="material-symbols-outlined" aria-hidden="true">public</span>
+                                <span>Open the atlas</span>
+                            </a>
+                        </div>
+
+                        <!-- Pieces held and catalogue entries are different numbers whenever
+                             a coin is held in multiples, so both are named. -->
+                        <dl id="statistics" class="hero-stats">
+                            <div class="stat" title="<?= number_format($totalCoinsCount) ?> pieces held across <?= number_format($totalEntries) ?> catalogue entries">
+                                <dt>Coins<?php if ($totalEntries !== $totalCoinsCount): ?><span class="stat-note"> · <?= number_format($totalEntries) ?> entries</span><?php endif; ?></dt>
+                                <dd data-count="<?= (int)$totalCoinsCount ?>"><?= number_format($totalCoinsCount) ?></dd>
+                            </div>
+                            <div class="stat">
+                                <dt>Countries</dt>
+                                <dd data-count="<?= (int)$totalCountries ?>"><?= number_format($totalCountries) ?></dd>
+                            </div>
+                            <div class="stat">
+                                <dt>Currencies</dt>
+                                <dd data-count="<?= (int)$totalCurrencies ?>"><?= number_format($totalCurrencies) ?></dd>
+                            </div>
+                            <div class="stat">
+                                <dt>Era span</dt>
+                                <dd class="is-text"><?= sanitize($yearRange) ?></dd>
+                            </div>
+                        </dl>
+                    </div>
+
+                    <div class="hero-stage">
+                        <div class="orbit">
+                            <span class="orbit-ring orbit-ring--3" aria-hidden="true"></span>
+                            <span class="orbit-ring orbit-ring--1" aria-hidden="true"></span>
+                            <span class="orbit-ring orbit-ring--2" aria-hidden="true"></span>
+                            <?php if (!empty($heroCoins)): ?>
+                                <?php foreach ($heroCoins as $hIndex => $hc): ?>
+                                    <?php
+                                        if (!isset($orbitSlots[$hIndex])) { break; }
+                                        $hThumb = get_coin_thumbnail_path($hc['obverse_image']);
+                                        $hTitle = coin_display_title($hc);
+                                        $hSize  = $hIndex === 0 ? 240 : 120;
+                                    ?>
+                                    <a href="<?= sanitize(coin_path($hc)) ?>" class="orbit-coin orbit-coin--<?= $orbitSlots[$hIndex] ?>" title="<?= sanitize($hTitle) ?>">
+                                        <img class="coin-img" src="<?= sanitize($hThumb) ?>" alt="<?= sanitize($hTitle) ?>"
+                                             width="<?= $hSize ?>" height="<?= $hSize ?>" loading="eager" decoding="async"
+                                             <?= $hIndex === 0 ? 'fetchpriority="high"' : '' ?>/>
+                                    </a>
+                                <?php endforeach; ?>
+                            <?php else: ?>
+                                <span class="orbit-coin orbit-coin--main orbit-coin--logo">
+                                    <img class="coin-img" src="<?= sanitize(placeholder_image_path()) ?>" alt="" width="240" height="240"/>
+                                </span>
+                            <?php endif; ?>
+                            <?php if ($featuredCount > 0): ?>
+                                <a class="orbit-caption" href="<?= home_url(['featured' => '1'], 'collection') ?>">
+                                    <span class="material-symbols-outlined icon-fill" aria-hidden="true">star</span>
+                                    <span>Featured showcase</span>
+                                </a>
+                            <?php endif; ?>
+                        </div>
                     </div>
                 </div>
-            </div>
-        </section>
+            </section>
+        </div>
 
-        <!-- SECTION 2: World Map View (OpenStreetMap + Leaflet.js Real Geographic Map with ALL Collection Countries) -->
-        <section id="countriesMap" class="card border-0 shadow-sm rounded-4 p-3 p-md-4 mb-4">
-            <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-2 mb-3">
+        <!-- SECTION 2: The atlas - an Equal Earth world map drawn from local SVG,
+             no tile server. The ranked list beside it is the accessible, crawlable
+             version of the same information. -->
+        <section id="countriesMap" class="section wrap" aria-labelledby="atlas-title">
+            <div class="section-head" data-reveal>
                 <div>
-                    <h2 class="font-heading text-primary fs-3 mb-0 d-flex align-items-center gap-2">
-                        <span class="material-symbols-outlined text-primary fs-3">public</span>
-                        <span>Interactive Numismatic World Map</span>
-                    </h2>
-                    <p class="text-muted small mb-0">Explore <?= count($leafletMarkers) ?> mapped coin origin regions across OpenStreetMap. Tap any pulsing gold pin to filter entries.</p>
-                </div>
-
-                <!-- Map Legend & Control Buttons -->
-                <div class="d-flex align-items-center gap-2 flex-wrap">
-                    <button class="btn btn-sm btn-outline-archival d-inline-flex align-items-center gap-1" onclick="resetMapView()">
-                        <span class="material-symbols-outlined fs-6">center_focus_strong</span>
-                        <span>Fit All Pins</span>
-                    </button>
-                    <!-- Full Screen Map Button -->
-                    <button id="mapFullscreenBtn" class="btn btn-sm btn-outline-archival d-inline-flex align-items-center gap-1" onclick="toggleMapFullscreen()">
-                        <span class="material-symbols-outlined fs-6" id="mapFullscreenIcon">fullscreen</span>
-                        <span id="mapFullscreenText">Full Screen</span>
-                    </button>
+                    <p class="eyebrow">The atlas</p>
+                    <h2 id="atlas-title" class="section-title">Where the coins come from</h2>
+                    <p class="section-sub">Every country in gold is represented in the archive, and the deeper the gold, the more coins. Select a country to see what is held, or one that is still missing to offer an exchange.</p>
                 </div>
             </div>
 
-            <!-- OpenStreetMap Leaflet Container -->
-            <div class="position-relative border p-1 mb-3 overflow-hidden shadow-sm rounded-3">
-                <div id="leafletMap"></div>
-            </div>
+            <div class="atlas panel" id="atlas" data-reveal>
+                <div class="atlas-main">
+                    <div class="atlas-toolbar">
+                        <div class="chip-row" role="group" aria-label="Zoom to a region">
+                            <button type="button" class="chip" data-region="world" aria-pressed="true">World</button>
+                            <button type="button" class="chip" data-region="europe" aria-pressed="false">Europe</button>
+                            <button type="button" class="chip" data-region="asia" aria-pressed="false">Asia</button>
+                            <button type="button" class="chip" data-region="africa" aria-pressed="false">Africa</button>
+                            <button type="button" class="chip" data-region="americas" aria-pressed="false">Americas</button>
+                            <button type="button" class="chip" data-region="oceania" aria-pressed="false">Oceania</button>
+                        </div>
+                        <div class="atlas-tools">
+                            <button type="button" class="icon-btn" data-zoom="in" aria-label="Zoom in"><span class="material-symbols-outlined" aria-hidden="true">add</span></button>
+                            <button type="button" class="icon-btn" data-zoom="out" aria-label="Zoom out"><span class="material-symbols-outlined" aria-hidden="true">remove</span></button>
+                            <button type="button" class="icon-btn" data-fullscreen aria-label="Show the map full screen"><span class="material-symbols-outlined" aria-hidden="true" data-fs-icon>fullscreen</span></button>
+                        </div>
+                    </div>
 
-            <!-- Compact & Space-Saving Country List (Horizontal Scroll & Dropdown) -->
-            <div class="border-top pt-3">
-                <div class="d-flex align-items-center justify-content-between mb-2">
-                    <h3 class="font-label-archival text-muted mb-0">Represented Countries (<?= count($countryCounts) ?>):</h3>
-                    <a href="<?= home_url([], 'collection') ?>" class="small text-primary text-decoration-none font-label-archival">View All</a>
+                    <div class="atlas-map" id="atlasMap" tabindex="0"
+                         data-src="<?= sanitize(asset_url('/assets/img/atlas.svg')) ?>"
+                         aria-label="World map of the collection. Plus and minus zoom, arrow keys pan, zero resets.">
+                        <div class="atlas-loading" aria-hidden="true">Loading map…</div>
+                        <div class="atlas-legend" aria-hidden="true">
+                            <span class="label-long">Coins</span>
+                            <span>1</span>
+                            <span class="scale"><span></span><span></span><span></span><span></span></span>
+                            <span>10+</span>
+                        </div>
+                        <div class="atlas-tip" aria-hidden="true"></div>
+                        <div class="atlas-hint" aria-hidden="true"></div>
+                        <div class="atlas-card" role="region" aria-live="polite" aria-label="Country details" hidden></div>
+                    </div>
                 </div>
 
-                <!-- Mobile Compact Select Dropdown -->
-                <div class="d-block d-md-none mb-2">
-                    <select class="form-select form-select-archival" onchange="if(this.value) window.location.href=this.value;">
-                        <option value="<?= home_url([], 'collection') ?>">Filter by Country...</option>
-                        <?php foreach ($countryCounts as $cc): ?>
-                            <option value="<?= sanitize(home_url(['country' => $cc['country']], 'collection')) ?>" <?= ($countryFilter === $cc['country']) ? 'selected' : '' ?>>
-                                <?= sanitize($cc['country']) ?> (<?= $cc['count'] ?> coin<?= $cc['count'] === 1 ? '' : 's' ?>)
-                            </option>
+                <aside class="atlas-aside" aria-labelledby="atlas-list-title">
+                    <div class="atlas-progress">
+                        <div class="big"><?= number_format($totalCountries) ?><small><?= sanitize($countryLabel) ?></small></div>
+                        <div class="label">About <?= $atlasPct ?>% of the world's 195 countries</div>
+                        <div class="meter" style="--w: <?= max(2, $atlasPct) ?>%"><span></span></div>
+                    </div>
+                    <h3 id="atlas-list-title" class="atlas-list-title">Ranked by coins held</h3>
+                    <ol class="atlas-list">
+                        <?php foreach ($countryCounts as $ci => $cc): ?>
+                            <li>
+                                <a class="atlas-row<?= $countryFilter === $cc['country'] ? ' is-current' : '' ?>"
+                                   href="<?= sanitize(home_url(['country' => $cc['country']], 'collection')) ?>"
+                                   data-country="<?= sanitize($cc['country']) ?>"
+                                   <?= $countryFilter === $cc['country'] ? 'aria-current="true"' : '' ?>>
+                                    <span class="rank"><?= $ci + 1 ?></span>
+                                    <span class="name"><?= sanitize($cc['country']) ?></span>
+                                    <span class="num"><?= (int)$cc['count'] ?> <span class="visually-hidden">coin<?= (int)$cc['count'] === 1 ? '' : 's' ?></span></span>
+                                    <span class="bar" aria-hidden="true"><span style="--w: <?= max(4, (int)round($cc['count'] / $atlasMax * 100)) ?>%"></span></span>
+                                </a>
+                            </li>
                         <?php endforeach; ?>
-                    </select>
-                </div>
-
-                <!-- Desktop & Tablet Horizontal Scroll Bar -->
-                <div class="d-none d-md-flex align-items-center gap-2 overflow-x-auto country-scroll-bar pb-1">
-                    <a href="<?= home_url([], 'collection') ?>" class="btn btn-sm <?= empty($countryFilter) ? 'btn-primary-archival' : 'btn-outline-archival' ?> text-nowrap">All Countries</a>
-                    <?php foreach ($countryCounts as $cc): ?>
-                        <a href="<?= sanitize(home_url(['country' => $cc['country']], 'collection')) ?>" class="btn btn-sm <?= ($countryFilter === $cc['country']) ? 'btn-primary-archival' : 'btn-outline-archival' ?> text-nowrap d-inline-flex align-items-center gap-1">
-                            <span><?= sanitize($cc['country']) ?></span>
-                            <span class="badge bg-secondary-subtle text-dark ms-1"><?= $cc['count'] ?></span>
-                        </a>
-                    <?php endforeach; ?>
-                </div>
+                    </ol>
+                </aside>
             </div>
         </section>
 
-        <!-- SECTION 3: Public Collection Gallery Grid -->
-        <section id="collection">
-            <div class="d-flex align-items-center justify-content-between mb-3">
-                <div class="d-flex align-items-center gap-2">
-                    <a href="<?= home_url([], 'collection') ?>" class="btn btn-sm <?= ($featuredFilter !== 1) ? 'btn-primary-archival' : 'btn-outline-archival' ?>">All Collection</a>
-                    <a href="<?= home_url(['featured' => '1'], 'collection') ?>" class="btn btn-sm <?= ($featuredFilter === 1) ? 'btn-primary-archival' : 'btn-outline-archival' ?> d-inline-flex align-items-center gap-1">
-                        <span class="material-symbols-outlined fs-6">star</span>
-                        <span>Featured Showcase (<?= $featuredCount ?>)</span>
+        <!-- SECTION 3: Public collection gallery -->
+        <section id="collection" class="section wrap" aria-labelledby="collection-title">
+            <div class="section-head" data-reveal>
+                <div>
+                    <p class="eyebrow">The collection</p>
+                    <h2 id="collection-title" class="section-title">Browse the archive</h2>
+                    <!-- "entries", not "coins": this counts catalogue records, while the
+                         Coins statistic counts pieces held. -->
+                    <p class="section-sub gallery-meta">
+                        Showing <?= count($coins) ?> of <?= number_format($totalMatching) ?> entr<?= $totalMatching === 1 ? 'y' : 'ies' ?><?= $totalPages > 1 ? ' (page ' . $page . ' of ' . $totalPages . ')' : '' ?>.
+                        Hover over or tap a coin to turn it over.
+                    </p>
+                </div>
+                <div class="chip-row" aria-label="Collection view">
+                    <a href="<?= home_url([], 'collection') ?>" class="chip<?= $featuredFilter !== 1 ? ' is-active' : '' ?>"<?= $featuredFilter !== 1 ? ' aria-current="page"' : '' ?>>All coins</a>
+                    <a href="<?= home_url(['featured' => '1'], 'collection') ?>" class="chip<?= $featuredFilter === 1 ? ' is-active' : '' ?>"<?= $featuredFilter === 1 ? ' aria-current="page"' : '' ?>>
+                        <span class="material-symbols-outlined icon-fill" aria-hidden="true">star</span>
+                        <span>Featured</span>
+                        <span class="count"><?= (int)$featuredCount ?></span>
                     </a>
                 </div>
-                <div class="small text-muted d-none d-sm-block">
-                    <!-- "entries", not "coins": this counts catalogue records, while the
-                         Coins statistic counts pieces held. Naming the unit is what stops
-                         the two figures reading as a contradiction. -->
-                    Showing <?= count($coins) ?> of <?= number_format($totalMatching) ?> entr<?= $totalMatching === 1 ? 'y' : 'ies' ?><?= $totalPages > 1 ? ' (Page ' . $page . ' of ' . $totalPages . ')' : '' ?>
-                </div>
             </div>
 
-            <!-- Search & Desktop Filter Bar -->
-            <form method="GET" action="/" id="galleryForm" class="mb-4">
+            <!-- Search & filter toolbar -->
+            <form method="GET" action="/" id="galleryForm" class="toolbar panel" role="search">
                 <?php
                     // Carry the filters this bar does not expose. Without these the
-                    // desktop search silently dropped an active currency or year
-                    // filter while the badges above still claimed it was applied.
+                    // search silently dropped an active currency or year filter
+                    // while the tags below still claimed it was applied.
                     if ($featuredFilter === 1) {
                         echo '<input type="hidden" name="featured" value="1"/>';
                     }
@@ -942,170 +580,144 @@ $cssVersion = file_exists(__DIR__ . '/assets/css/style.css') ? filemtime(__DIR__
                         echo '<input type="hidden" name="year_max" value="' . (int)$yearMax . '"/>';
                     }
                 ?>
-
-                <div class="row g-2 align-items-center">
-                    <div class="col-12 col-md-5">
-                        <div class="input-group">
-                            <span class="input-group-text bg-white border-end-0 border-outline-variant">
-                                <span class="material-symbols-outlined text-muted">search</span>
-                            </span>
-                            <input type="text" name="search" aria-label="Search Collection" class="form-control form-control-archival border-start-0 ps-0" placeholder="Search country, currency, era..." value="<?= sanitize($search) ?>"/>
-                        </div>
-                    </div>
-
-                    <div class="col-8 col-md-4 d-none d-md-flex gap-2">
-                        <select name="country" aria-label="Filter by Country" class="form-select form-select-archival" onchange="this.form.submit()">
-                            <option value="">All Countries</option>
-                            <?php foreach ($countries as $c): ?>
-                                <option value="<?= sanitize($c) ?>" <?= $countryFilter === $c ? 'selected' : '' ?>><?= sanitize($c) ?></option>
-                            <?php endforeach; ?>
-                        </select>
-
-                        <select name="grade" aria-label="Filter by Grade" class="form-select form-select-archival" onchange="this.form.submit()">
-                            <option value="">All Grades</option>
-                            <?php foreach ($grades as $g): ?>
-                                <option value="<?= sanitize($g) ?>" <?= $gradeFilter === $g ? 'selected' : '' ?>><?= sanitize($g) ?></option>
-                            <?php endforeach; ?>
-                        </select>
-                    </div>
-
-                    <div class="col-6 col-md-3">
-                        <select name="sort" aria-label="Sort Collection" class="form-select form-select-archival" onchange="this.form.submit()">
-                            <option value="date_desc" <?= $sortBy === 'date_desc' ? 'selected' : '' ?>>Sort: Date Added (Newest)</option>
-                            <option value="date_asc" <?= $sortBy === 'date_asc' ? 'selected' : '' ?>>Sort: Date Added (Oldest)</option>
-                            <option value="country_asc" <?= $sortBy === 'country_asc' ? 'selected' : '' ?>>Sort: Country (A-Z)</option>
-                            <option value="year_asc" <?= $sortBy === 'year_asc' ? 'selected' : '' ?>>Sort: Year (Ascending)</option>
-                            <option value="year_desc" <?= $sortBy === 'year_desc' ? 'selected' : '' ?>>Sort: Year (Descending)</option>
-                        </select>
-                    </div>
-
-                    <div class="col-6 col-md-auto d-md-none text-end">
-                        <button class="btn btn-outline-archival w-100 d-flex align-items-center justify-content-center gap-1" type="button" onclick="toggleMobileFilters(event)">
-                            <span class="material-symbols-outlined fs-5">tune</span>
-                            <span>Filters (<?= $activeFilterCount ?>)</span>
-                        </button>
-                    </div>
+                <div class="field field-search">
+                    <span class="material-symbols-outlined" aria-hidden="true">search</span>
+                    <input type="search" name="search" class="input-x" aria-label="Search the collection"
+                           placeholder="Search country, currency, era…" value="<?= sanitize($search) ?>"/>
                 </div>
+
+                <select name="country" aria-label="Filter by country" class="select-x desktop-only" data-autosubmit>
+                    <option value="">All countries</option>
+                    <?php foreach ($countries as $c): ?>
+                        <option value="<?= sanitize($c) ?>" <?= $countryFilter === $c ? 'selected' : '' ?>><?= sanitize($c) ?></option>
+                    <?php endforeach; ?>
+                </select>
+
+                <select name="grade" aria-label="Filter by grade" class="select-x desktop-only" data-autosubmit>
+                    <option value="">All grades</option>
+                    <?php foreach ($grades as $g): ?>
+                        <option value="<?= sanitize($g) ?>" <?= $gradeFilter === $g ? 'selected' : '' ?>><?= sanitize($g) ?></option>
+                    <?php endforeach; ?>
+                </select>
+
+                <select name="sort" aria-label="Sort the collection" class="select-x" data-autosubmit>
+                    <option value="date_desc" <?= $sortBy === 'date_desc' ? 'selected' : '' ?>>Latest added</option>
+                    <option value="date_asc" <?= $sortBy === 'date_asc' ? 'selected' : '' ?>>First added</option>
+                    <option value="country_asc" <?= $sortBy === 'country_asc' ? 'selected' : '' ?>>Country (A–Z)</option>
+                    <option value="year_asc" <?= $sortBy === 'year_asc' ? 'selected' : '' ?>>Oldest year</option>
+                    <option value="year_desc" <?= $sortBy === 'year_desc' ? 'selected' : '' ?>>Newest year</option>
+                </select>
+
+                <button type="button" class="btn-x btn-ghost toolbar-mobile" data-filters-toggle aria-controls="filterPanel" aria-expanded="false">
+                    <span class="material-symbols-outlined" aria-hidden="true">tune</span>
+                    <span>Filters<?= $activeFilterCount > 0 ? ' (' . $activeFilterCount . ')' : '' ?></span>
+                </button>
             </form>
 
-            <!-- Direct Expandable Mobile Filter Panel (Hidden by default) -->
-            <div id="mobileFilterPanel" class="card border-0 shadow-sm p-4 rounded-3 mb-4" style="background-color: var(--surface-bright); border: 1px solid var(--primary-color) !important;">
-                <div class="d-flex justify-content-between align-items-center mb-3">
-                    <h2 class="font-heading text-primary fs-5 mb-0 d-flex align-items-center gap-1">
-                        <span class="material-symbols-outlined">tune</span>
-                        <span>Filter Collection</span>
-                    </h2>
-                    <button type="button" class="btn-close" onclick="toggleMobileFilters(event)" aria-label="Close Mobile Filters"></button>
-                </div>
-                
+            <!-- Full filter panel (phones). Every filter, including currency and year range. -->
+            <div id="filterPanel" class="filter-panel panel" hidden>
                 <form method="GET" action="/">
-                    <div class="mb-3">
-                        <label class="form-label-archival">Search Keywords</label>
-                        <input type="text" name="search" class="form-control form-control-archival" placeholder="Search era, country, notes..." value="<?= sanitize($search) ?>"/>
-                    </div>
-
-                    <div class="mb-3">
-                        <label class="form-label-archival">Showcase Filter</label>
-                        <select name="featured" class="form-select form-select-archival">
-                            <option value="">All Coins</option>
-                            <option value="1" <?= $featuredFilter === 1 ? 'selected' : '' ?>>⭐ Featured Showcase Only</option>
-                        </select>
-                    </div>
-
-                    <div class="mb-3">
-                        <label class="form-label-archival">Country / Region</label>
-                        <select name="country" class="form-select form-select-archival">
-                            <option value="">All Countries</option>
-                            <?php foreach ($countries as $c): ?>
-                                <option value="<?= sanitize($c) ?>" <?= $countryFilter === $c ? 'selected' : '' ?>><?= sanitize($c) ?></option>
-                            <?php endforeach; ?>
-                        </select>
-                    </div>
-
-                    <div class="mb-3">
-                        <label class="form-label-archival">Currency Name</label>
-                        <select name="currency" class="form-select form-select-archival">
-                            <option value="">All Currencies</option>
-                            <?php foreach ($currencies as $cur): ?>
-                                <option value="<?= sanitize($cur) ?>" <?= $currencyFilter === $cur ? 'selected' : '' ?>><?= sanitize($cur) ?></option>
-                            <?php endforeach; ?>
-                        </select>
-                    </div>
-
-                    <div class="mb-3">
-                        <label class="form-label-archival">Condition / Grade</label>
-                        <select name="grade" class="form-select form-select-archival">
-                            <option value="">All Grades</option>
-                            <?php foreach ($grades as $g): ?>
-                                <option value="<?= sanitize($g) ?>" <?= $gradeFilter === $g ? 'selected' : '' ?>><?= sanitize($g) ?></option>
-                            <?php endforeach; ?>
-                        </select>
-                    </div>
-
-                    <div class="row g-2 mb-3">
-                        <div class="col-6">
-                            <label class="form-label-archival">Min Year</label>
-                            <input type="number" name="year_min" class="form-control form-control-archival" placeholder="e.g. 1800" value="<?= $yearMin ?? '' ?>"/>
+                    <div class="grid">
+                        <div class="full">
+                            <label for="f-search">Search</label>
+                            <input id="f-search" type="search" name="search" class="input-x" placeholder="Era, country, notes…" value="<?= sanitize($search) ?>"/>
                         </div>
-                        <div class="col-6">
-                            <label class="form-label-archival">Max Year</label>
-                            <input type="number" name="year_max" class="form-control form-control-archival" placeholder="e.g. 1950" value="<?= $yearMax ?? '' ?>"/>
+                        <div class="full">
+                            <label for="f-featured">Showcase</label>
+                            <select id="f-featured" name="featured" class="select-x">
+                                <option value="">All coins</option>
+                                <option value="1" <?= $featuredFilter === 1 ? 'selected' : '' ?>>Featured coins only</option>
+                            </select>
+                        </div>
+                        <div class="full">
+                            <label for="f-country">Country</label>
+                            <select id="f-country" name="country" class="select-x">
+                                <option value="">All countries</option>
+                                <?php foreach ($countries as $c): ?>
+                                    <option value="<?= sanitize($c) ?>" <?= $countryFilter === $c ? 'selected' : '' ?>><?= sanitize($c) ?></option>
+                                <?php endforeach; ?>
+                            </select>
+                        </div>
+                        <div class="full">
+                            <label for="f-currency">Currency</label>
+                            <select id="f-currency" name="currency" class="select-x">
+                                <option value="">All currencies</option>
+                                <?php foreach ($currencies as $cur): ?>
+                                    <option value="<?= sanitize($cur) ?>" <?= $currencyFilter === $cur ? 'selected' : '' ?>><?= sanitize($cur) ?></option>
+                                <?php endforeach; ?>
+                            </select>
+                        </div>
+                        <div class="full">
+                            <label for="f-grade">Condition / grade</label>
+                            <select id="f-grade" name="grade" class="select-x">
+                                <option value="">All grades</option>
+                                <?php foreach ($grades as $g): ?>
+                                    <option value="<?= sanitize($g) ?>" <?= $gradeFilter === $g ? 'selected' : '' ?>><?= sanitize($g) ?></option>
+                                <?php endforeach; ?>
+                            </select>
+                        </div>
+                        <div>
+                            <label for="f-ymin">From year</label>
+                            <input id="f-ymin" type="number" name="year_min" class="input-x" placeholder="e.g. 1800" value="<?= $yearMin ?? '' ?>"/>
+                        </div>
+                        <div>
+                            <label for="f-ymax">To year</label>
+                            <input id="f-ymax" type="number" name="year_max" class="input-x" placeholder="e.g. 1950" value="<?= $yearMax ?? '' ?>"/>
+                        </div>
+                        <div class="full">
+                            <label for="f-sort">Sort order</label>
+                            <select id="f-sort" name="sort" class="select-x">
+                                <option value="date_desc" <?= $sortBy === 'date_desc' ? 'selected' : '' ?>>Latest added</option>
+                                <option value="date_asc" <?= $sortBy === 'date_asc' ? 'selected' : '' ?>>First added</option>
+                                <option value="country_asc" <?= $sortBy === 'country_asc' ? 'selected' : '' ?>>Country (A–Z)</option>
+                                <option value="year_asc" <?= $sortBy === 'year_asc' ? 'selected' : '' ?>>Oldest year</option>
+                                <option value="year_desc" <?= $sortBy === 'year_desc' ? 'selected' : '' ?>>Newest year</option>
+                            </select>
                         </div>
                     </div>
-
-                    <div class="mb-4">
-                        <label class="form-label-archival">Sort Order</label>
-                        <select name="sort" class="form-select form-select-archival">
-                            <option value="date_desc" <?= $sortBy === 'date_desc' ? 'selected' : '' ?>>Date Added (Newest)</option>
-                            <option value="date_asc" <?= $sortBy === 'date_asc' ? 'selected' : '' ?>>Date Added (Oldest)</option>
-                            <option value="country_asc" <?= $sortBy === 'country_asc' ? 'selected' : '' ?>>Country (A-Z)</option>
-                            <option value="year_asc" <?= $sortBy === 'year_asc' ? 'selected' : '' ?>>Year (Ascending)</option>
-                            <option value="year_desc" <?= $sortBy === 'year_desc' ? 'selected' : '' ?>>Year (Descending)</option>
-                        </select>
-                    </div>
-
-                    <div class="d-grid gap-2">
-                        <button type="submit" class="btn btn-primary-archival">Apply Mobile Filters</button>
-                        <a href="<?= home_url([], 'collection') ?>" class="btn btn-outline-secondary">Reset Filters</a>
+                    <div class="actions">
+                        <a href="<?= home_url([], 'collection') ?>" class="btn-x btn-ghost">Reset</a>
+                        <button type="submit" class="btn-x btn-solid">Apply filters</button>
                     </div>
                 </form>
             </div>
 
-            <!-- Active Filter Badges -->
+            <!-- Active filter tags -->
             <?php if ($activeFilterCount > 0 || $search !== ''): ?>
-                <div class="d-flex flex-wrap align-items-center gap-2 mb-4">
-                    <span class="text-muted small">Active Filters:</span>
+                <div class="active-filters">
+                    <span class="label">Filtered by</span>
                     <?php if ($search !== ''): ?>
-                        <span class="badge bg-secondary-subtle text-dark border px-2 py-1">Query: "<?= sanitize($search) ?>"</span>
+                        <span class="tag">“<?= sanitize($search) ?>”</span>
                     <?php endif; ?>
                     <?php if ($featuredFilter === 1): ?>
-                        <span class="badge badge-featured px-2 py-1">Featured Showcase</span>
+                        <span class="tag"><span class="material-symbols-outlined icon-fill" style="font-size:15px" aria-hidden="true">star</span>Featured</span>
                     <?php endif; ?>
                     <?php if ($countryFilter !== ''): ?>
-                        <span class="badge bg-secondary-subtle text-dark border px-2 py-1">Country: <?= sanitize($countryFilter) ?></span>
+                        <span class="tag">Country: <?= sanitize($countryFilter) ?></span>
                     <?php endif; ?>
                     <?php if ($currencyFilter !== ''): ?>
-                        <span class="badge bg-secondary-subtle text-dark border px-2 py-1">Currency: <?= sanitize($currencyFilter) ?></span>
+                        <span class="tag">Currency: <?= sanitize($currencyFilter) ?></span>
                     <?php endif; ?>
                     <?php if ($gradeFilter !== ''): ?>
-                        <span class="badge bg-secondary-subtle text-dark border px-2 py-1">Grade: <?= sanitize($gradeFilter) ?></span>
+                        <span class="tag">Grade: <?= sanitize($gradeFilter) ?></span>
                     <?php endif; ?>
                     <?php if ($yearMin !== null || $yearMax !== null): ?>
-                        <span class="badge bg-secondary-subtle text-dark border px-2 py-1">Year: <?= $yearMin ?? 'Any' ?> - <?= $yearMax ?? 'Any' ?></span>
+                        <span class="tag">Year: <?= $yearMin ?? 'any' ?> – <?= $yearMax ?? 'any' ?></span>
                     <?php endif; ?>
-                    <a href="<?= home_url([], 'collection') ?>" class="btn btn-link text-decoration-none p-0 ms-2 text-danger small">Clear All</a>
+                    <a href="<?= home_url([], 'collection') ?>" class="clear-link">Clear all</a>
                 </div>
             <?php endif; ?>
 
-            <!-- Coin Grid Section with 3D Rotating Flipping Medallions & Lazy Loading -->
+            <!-- Coin grid: each coin turns over to its reverse on hover, focus or tap -->
             <?php if (count($coins) > 0): ?>
-                <div class="row row-cols-2 row-cols-md-3 row-cols-lg-4 g-3 g-md-4 mb-4">
+                <div class="coin-grid">
                     <?php foreach ($coins as $coin): ?>
                         <?php
                             $obvThumb = get_coin_thumbnail_path($coin['obverse_image'] ?? '');
-                            $hasRev = !empty($coin['reverse_image']) && file_exists(__DIR__ . '/assets/uploads/' . $coin['reverse_image']);
+                            $obvIsPlaceholder = is_placeholder_image($obvThumb);
+                            $hasRev = !empty($coin['reverse_image']) && file_exists(__DIR__ . '/assets/uploads/' . safe_upload_name($coin['reverse_image']));
                             $revThumb = $hasRev ? get_coin_thumbnail_path($coin['reverse_image']) : $obvThumb;
-                            
+
                             $matLower = strtolower(trim($coin['material'] ?? ''));
                             if ($matLower === 'gold') {
                                 $matClass = 'badge-metal-gold';
@@ -1118,52 +730,49 @@ $cssVersion = file_exists(__DIR__ . '/assets/css/style.css') ? filemtime(__DIR__
                             }
                             $coinAltText = sanitize($coin['denomination']) . ' coin from ' . sanitize($coin['country']) . ' (' . sanitize($coin['year']) . ')';
                         ?>
-                        <div class="col">
-                            <div class="coin-card">
-                                <div class="coin-3d-scene" onclick="toggleCoinFlip(this, event)">
-                                    <div class="coin-3d-flipper <?= $hasRev ? 'has-reverse' : '' ?>">
-                                        <!-- Obverse (Front Face - Pure Unobstructed Artwork) -->
-                                        <div class="coin-face coin-face-obv">
-                                            <img src="<?= sanitize($obvThumb) ?>" alt="<?= $coinAltText ?>" loading="lazy" decoding="async" width="220" height="220"/>
-                                            <?php if ((int)$coin['is_featured'] === 1): ?>
-                                                <span class="badge-featured-mini" title="Featured Collection">
-                                                    <span class="material-symbols-outlined">star</span>
-                                                </span>
-                                            <?php endif; ?>
-                                        </div>
-                                        <!-- Reverse (Back Face - 3D Flipped on Hover/Tap) -->
-                                        <?php if ($hasRev): ?>
-                                            <div class="coin-face coin-face-rev">
-                                                <img src="<?= sanitize($revThumb) ?>" alt="<?= $coinAltText ?> Reverse" loading="lazy" decoding="async" width="220" height="220"/>
-                                                <span class="badge-rev-indicator">REV</span>
-                                            </div>
-                                        <?php endif; ?>
+                        <article class="coin-card">
+                            <div class="coin-3d-scene" data-flip>
+                                <div class="coin-3d-flipper<?= $hasRev ? ' has-reverse' : '' ?>">
+                                    <div class="coin-face coin-face-obv<?= $obvIsPlaceholder ? ' is-placeholder' : '' ?>">
+                                        <img src="<?= sanitize($obvThumb) ?>" alt="<?= $coinAltText ?>" loading="lazy" decoding="async" width="220" height="220"/>
                                     </div>
                                     <?php if ($hasRev): ?>
-                                        <span class="flip-hint-badge" title="Tap or hover to flip coin">
-                                            <span class="material-symbols-outlined">sync</span>
-                                        </span>
+                                        <div class="coin-face coin-face-rev">
+                                            <img src="<?= sanitize($revThumb) ?>" alt="<?= $coinAltText ?>, reverse" loading="lazy" decoding="async" width="220" height="220"/>
+                                            <span class="badge-rev-indicator" aria-hidden="true">REV</span>
+                                        </div>
                                     <?php endif; ?>
                                 </div>
-                                <a href="<?= sanitize(coin_path($coin)) ?>" class="coin-card-link mt-auto w-100 text-decoration-none" title="<?= sanitize(coin_display_title($coin)) ?>">
-                                    <!-- h3, not h2: these sit under the "Collection" section
-                                         heading. 60 sibling h2s flattened the outline. -->
-                                    <h3 class="coin-card-title h5 mb-1"><?= sanitize($coin['denomination']) ?></h3>
-                                    <div class="coin-card-sub"><?= sanitize($coin['country']) ?></div>
-                                    <div class="d-flex align-items-center justify-content-center gap-1 mt-1 flex-wrap">
-                                        <span class="coin-card-year"><?= sanitize($coin['year']) ?></span>
-                                        <?php if (!empty($coin['material'])): ?>
-                                            <span class="text-muted small">&bull;</span>
-                                            <span class="coin-card-material <?= $matClass ?>"><?= sanitize($coin['material']) ?></span>
-                                        <?php endif; ?>
-                                    </div>
-                                </a>
+                                <?php if ((int)$coin['is_featured'] === 1): ?>
+                                    <span class="badge-featured-mini" title="Featured coin">
+                                        <span class="material-symbols-outlined icon-fill" aria-hidden="true">star</span>
+                                        <span class="visually-hidden">Featured</span>
+                                    </span>
+                                <?php endif; ?>
+                                <?php if ($hasRev): ?>
+                                    <span class="flip-hint-badge" aria-hidden="true">
+                                        <span class="material-symbols-outlined">sync</span>Flip
+                                    </span>
+                                <?php endif; ?>
                             </div>
-                        </div>
+                            <a href="<?= sanitize(coin_path($coin)) ?>" class="coin-card-link" title="<?= sanitize(coin_display_title($coin)) ?>">
+                                <!-- h3: these sit under the "Browse the archive" section heading. -->
+                                <h3 class="coin-card-title"><?= sanitize($coin['denomination']) ?></h3>
+                                <div class="coin-card-sub"><?= sanitize($coin['country']) ?></div>
+                                <div class="coin-card-meta">
+                                    <?php if (trim((string)$coin['year']) !== ''): ?>
+                                        <span class="coin-card-year"><?= sanitize($coin['year']) ?></span>
+                                    <?php endif; ?>
+                                    <?php if (!empty($coin['material'])): ?>
+                                        <span class="coin-card-material <?= $matClass ?>" title="<?= sanitize($coin['material']) ?>"><?= sanitize($coin['material']) ?></span>
+                                    <?php endif; ?>
+                                </div>
+                            </a>
+                        </article>
                     <?php endforeach; ?>
                 </div>
 
-                <!-- Pagination Bar (<?= COINS_PER_PAGE ?> coins per page) -->
+                <!-- Pagination (<?= COINS_PER_PAGE ?> entries per page) -->
                 <?php if ($totalPages > 1): ?>
                     <?php
                         // A window around the current page rather than every page
@@ -1174,98 +783,124 @@ $cssVersion = file_exists(__DIR__ . '/assets/css/style.css') ? filemtime(__DIR__
                         $windowTo   = min($totalPages, $page + $window);
                     ?>
                     <nav aria-label="Coin gallery pagination" class="d-flex justify-content-center my-4">
-                        <ul class="pagination pagination-md mb-0 flex-wrap">
+                        <ul class="pagination mb-0 flex-wrap">
                             <li class="page-item <?= ($page <= 1) ? 'disabled' : '' ?>">
-                                <a class="page-link border-outline-variant text-dark" rel="prev"
-                                   href="<?= $page > 1 ? sanitize(pagination_url($currentFilters, $page - 1)) : '#' ?>">Previous</a>
+                                <a class="page-link" rel="prev" href="<?= $page > 1 ? sanitize(pagination_url($currentFilters, $page - 1)) : '#' ?>">Previous</a>
                             </li>
 
                             <?php if ($windowFrom > 1): ?>
-                                <li class="page-item"><a class="page-link border-outline-variant text-dark" href="<?= sanitize(pagination_url($currentFilters, 1)) ?>">1</a></li>
+                                <li class="page-item"><a class="page-link" href="<?= sanitize(pagination_url($currentFilters, 1)) ?>">1</a></li>
                                 <?php if ($windowFrom > 2): ?>
-                                    <li class="page-item disabled"><span class="page-link border-outline-variant">…</span></li>
+                                    <li class="page-item disabled"><span class="page-link">…</span></li>
                                 <?php endif; ?>
                             <?php endif; ?>
 
                             <?php for ($p = $windowFrom; $p <= $windowTo; $p++): ?>
                                 <li class="page-item <?= ($p === $page) ? 'active' : '' ?>">
-                                    <a class="page-link border-outline-variant <?= ($p === $page) ? 'bg-primary border-primary text-white' : 'text-dark' ?>"
-                                       <?= $p === $page ? 'aria-current="page"' : '' ?>
+                                    <a class="page-link" <?= $p === $page ? 'aria-current="page"' : '' ?>
                                        href="<?= sanitize(pagination_url($currentFilters, $p)) ?>"><?= $p ?></a>
                                 </li>
                             <?php endfor; ?>
 
                             <?php if ($windowTo < $totalPages): ?>
                                 <?php if ($windowTo < $totalPages - 1): ?>
-                                    <li class="page-item disabled"><span class="page-link border-outline-variant">…</span></li>
+                                    <li class="page-item disabled"><span class="page-link">…</span></li>
                                 <?php endif; ?>
-                                <li class="page-item"><a class="page-link border-outline-variant text-dark" href="<?= sanitize(pagination_url($currentFilters, $totalPages)) ?>"><?= $totalPages ?></a></li>
+                                <li class="page-item"><a class="page-link" href="<?= sanitize(pagination_url($currentFilters, $totalPages)) ?>"><?= $totalPages ?></a></li>
                             <?php endif; ?>
 
                             <li class="page-item <?= ($page >= $totalPages) ? 'disabled' : '' ?>">
-                                <a class="page-link border-outline-variant text-dark" rel="next"
-                                   href="<?= $page < $totalPages ? sanitize(pagination_url($currentFilters, $page + 1)) : '#' ?>">Next</a>
+                                <a class="page-link" rel="next" href="<?= $page < $totalPages ? sanitize(pagination_url($currentFilters, $page + 1)) : '#' ?>">Next</a>
                             </li>
                         </ul>
                     </nav>
                 <?php endif; ?>
 
             <?php else: ?>
-                <div class="text-center py-5 bg-white border rounded p-4">
-                    <span class="material-symbols-outlined text-muted display-4 mb-3">search_off</span>
-                    <h2 class="font-heading h4">No Coins Found</h2>
-                    <p class="text-muted">No numismatic records matched your selected criteria or search term.</p>
-                    <a href="<?= home_url([], 'collection') ?>" class="btn btn-primary-archival mt-2">Reset All Filters</a>
+                <div class="empty-state panel">
+                    <span class="material-symbols-outlined" aria-hidden="true">search_off</span>
+                    <h3 class="h4">No coins found</h3>
+                    <p class="text-muted">No entries matched your search or filters.</p>
+                    <a href="<?= home_url([], 'collection') ?>" class="btn-x btn-solid">Reset all filters</a>
                 </div>
             <?php endif; ?>
         </section>
 
-        <!-- SECTION 4: About the Collection (Personal Digital Archive Reframing) -->
-        <section id="about" class="card border-0 shadow-sm rounded-4 p-4 mt-5 mb-4">
-            <div class="d-flex align-items-start gap-3">
-                <div class="rounded-circle p-3 d-flex align-items-center justify-content-center flex-shrink-0" style="background-color: var(--primary-fixed); color: var(--primary-color);">
-                    <span class="material-symbols-outlined fs-2">museum</span>
-                </div>
-                <div class="flex-grow-1">
-                    <h2 class="font-heading text-primary fs-3 mb-2">About the Collection</h2>
-                    <div id="bioText" class="bio-collapsed text-secondary leading-relaxed">
-                        <p><?= sanitize(SITE_NAME) ?> is the personal coin collection of <?= sanitize(SITE_AUTHOR) ?>, catalogued and published as an open reference. It currently holds <strong><?= number_format($totalEntries) ?> catalogued coins</strong><?= $totalEntries !== $totalCoinsCount ? ' (' . number_format($totalCoinsCount) . ' pieces in total, since some are held in multiples)' : '' ?> from <strong><?= number_format($totalCountries) ?> <?= sanitize($countryLabel) ?></strong>, covering <?= sanitize($yearRange) ?>, across <?= number_format($totalCurrencies) ?> distinct currencies.</p>
+        <!-- SECTION 4: About the collection -->
+        <section id="about" class="section wrap" aria-labelledby="about-title">
+            <div class="about panel" data-reveal>
+                <span class="rosette" aria-hidden="true"></span>
+                <figure class="about-visual m-0">
+                    <img src="/assets/logo.png" class="about-coin" width="320" height="320" loading="lazy" decoding="async"
+                         alt="The <?= sanitize(SITE_NAME) ?> emblem: a silver coin with a portrait, inscribed মুদ্রা আর্কাইভ (Mudra Archive) and এক টাকা (one taka)"/>
+                    <figcaption>The archive's emblem, inscribed <span lang="bn">মুদ্রা আর্কাইভ</span> and <span lang="bn">এক টাকা</span>, “one taka”.</figcaption>
+                </figure>
+                <div class="about-copy">
+                    <p class="eyebrow">The curator</p>
+                    <h2 id="about-title" class="section-title mb-3">About the collection</h2>
+                    <div id="bioText" class="bio-collapsed">
+                        <p class="lead-x"><?= sanitize(SITE_NAME) ?> is the personal coin collection of <?= sanitize(SITE_AUTHOR) ?>, catalogued and published as an open reference. It currently holds <strong><?= number_format($totalEntries) ?> catalogued coins</strong><?= $totalEntries !== $totalCoinsCount ? ' (' . number_format($totalCoinsCount) . ' pieces in total, since some are held in multiples)' : '' ?> from <strong><?= number_format($totalCountries) ?> <?= sanitize($countryLabel) ?></strong>, covering <?= sanitize($yearRange) ?>, across <?= number_format($totalCurrencies) ?> distinct currencies.</p>
                         <p>Most of these coins were gathered over time through Wikimedia events and through exchanges with collectors in other countries. Every entry records its denomination, year of issue, mint mark, metal, weight, diameter and condition grade, and is photographed on both the obverse and reverse faces so the details can be examined directly.</p>
-                        <p class="mb-0">If you would like to exchange your country's coin for Bangladeshi Taka, write to <a href="mailto:<?= sanitize(SITE_CONTACT) ?>" class="text-primary fw-bold text-decoration-none"><?= sanitize(SITE_CONTACT) ?></a>. This archive exists to preserve global numismatic history, celebrate international exchange and record unusual coinage from around the world. Nothing here is for sale.</p>
+                        <p class="mb-0">If you would like to exchange your country's coin for Bangladeshi Taka, write to <a href="mailto:<?= sanitize(SITE_CONTACT) ?>" class="fw-bold text-decoration-none"><?= sanitize(SITE_CONTACT) ?></a>. This archive exists to preserve global numismatic history, celebrate international exchange and record unusual coinage from around the world. Nothing here is for sale.</p>
                     </div>
-                    <button type="button" id="bioToggleBtn" onclick="toggleBio()" class="btn btn-link text-primary p-0 border-0 mt-2 font-label-archival text-decoration-none d-inline-flex align-items-center gap-1">
-                        <span>Show Full Details</span>
-                        <span class="material-symbols-outlined fs-6" id="bioToggleIcon" aria-hidden="true">expand_more</span>
+                    <button type="button" class="text-toggle mt-2" data-bio-toggle aria-controls="bioText" aria-expanded="false">
+                        <span>Read more</span>
+                        <span class="material-symbols-outlined" aria-hidden="true">expand_more</span>
                     </button>
+
+                    <ul class="about-facts">
+                        <li>
+                            <span class="material-symbols-outlined" aria-hidden="true">photo_camera</span>
+                            <strong>Both faces</strong>
+                            <span class="small">Every coin is photographed obverse and reverse.</span>
+                        </li>
+                        <li>
+                            <span class="material-symbols-outlined" aria-hidden="true">swap_horiz</span>
+                            <strong>Exchanges welcome</strong>
+                            <span class="small">Trade your country's coin for Bangladeshi Taka.</span>
+                        </li>
+                        <li>
+                            <span class="material-symbols-outlined" aria-hidden="true">money_off</span>
+                            <strong>Never for sale</strong>
+                            <span class="small">A reference collection, not a shop.</span>
+                        </li>
+                    </ul>
+
+                    <div class="about-actions">
+                        <a href="mailto:<?= sanitize(SITE_CONTACT) ?>?subject=<?= rawurlencode('Coin exchange') ?>" class="btn-x btn-solid">
+                            <span class="material-symbols-outlined" aria-hidden="true">mail</span>
+                            <span>Propose an exchange</span>
+                        </a>
+                        <a href="#collection" class="btn-x btn-ghost">
+                            <span class="material-symbols-outlined" aria-hidden="true">grid_view</span>
+                            <span>Browse the coins</span>
+                        </a>
+                    </div>
                 </div>
             </div>
         </section>
 
         <!-- SECTION 5: Questions this archive answers.
-             These are the phrasings people search for, answered in full on the
-             page. The matching FAQPage structured data in <head> is only valid
-             because the same text is visible here. -->
+             The matching FAQPage structured data in <head> is only valid because
+             the same text is visible here. <details> keeps every answer in the
+             DOM, readable without JavaScript. -->
         <?php if (!$isFiltered && $page === 1): ?>
-        <section id="faq" class="card border-0 shadow-sm rounded-4 p-4 mb-4" aria-labelledby="faq-heading">
-            <h2 id="faq-heading" class="font-heading text-primary fs-3 mb-3 d-flex align-items-center gap-2">
-                <span class="material-symbols-outlined fs-2" aria-hidden="true">help</span>
-                <span>Frequently Asked Questions</span>
-            </h2>
-            <div class="accordion accordion-flush" id="faqAccordion">
+        <section id="faq" class="section wrap" aria-labelledby="faq-heading">
+            <div class="section-head" data-reveal>
+                <div>
+                    <p class="eyebrow">Good to know</p>
+                    <h2 id="faq-heading" class="section-title">Frequently asked questions</h2>
+                </div>
+            </div>
+            <div class="faq panel" data-reveal>
                 <?php foreach ($faqs as $fi => $faq): ?>
-                    <div class="accordion-item bg-transparent">
-                        <h3 class="accordion-header" id="faqHeading<?= $fi ?>">
-                            <button class="accordion-button <?= $fi === 0 ? '' : 'collapsed' ?> bg-transparent px-0 font-heading fs-6"
-                                    type="button" data-bs-toggle="collapse" data-bs-target="#faqBody<?= $fi ?>"
-                                    aria-expanded="<?= $fi === 0 ? 'true' : 'false' ?>" aria-controls="faqBody<?= $fi ?>">
-                                <?= sanitize($faq[0]) ?>
-                            </button>
-                        </h3>
-                        <div id="faqBody<?= $fi ?>" class="accordion-collapse collapse <?= $fi === 0 ? 'show' : '' ?>"
-                             aria-labelledby="faqHeading<?= $fi ?>" data-bs-parent="#faqAccordion">
-                            <div class="accordion-body px-0 text-secondary leading-relaxed"><?= sanitize($faq[1]) ?></div>
-                        </div>
-                    </div>
+                    <details<?= $fi === 0 ? ' open' : '' ?>>
+                        <summary>
+                            <h3><?= sanitize($faq[0]) ?></h3>
+                            <span class="plus" aria-hidden="true"></span>
+                        </summary>
+                        <p class="answer"><?= sanitize($faq[1]) ?></p>
+                    </details>
                 <?php endforeach; ?>
             </div>
         </section>
@@ -1273,204 +908,15 @@ $cssVersion = file_exists(__DIR__ . '/assets/css/style.css') ? filemtime(__DIR__
 
     </main>
 
-    <!-- Footer (Spec Requirement: A personal digital archive of Muhammad Yahya's numismatic collection) -->
-    <footer class="mt-auto py-4 bg-white border-top text-center text-muted small">
-        <div class="container">
-            <p class="mb-1">&copy; <?= date('Y') ?> <?= sanitize(SITE_NAME) ?> &bull; A personal digital archive of <?= sanitize(SITE_AUTHOR) ?>'s numismatic collection.</p>
-            <p class="mb-0 text-secondary" style="font-size: 0.8rem;">
-                <a href="<?= home_url([], 'about') ?>" class="text-muted text-decoration-underline">About</a> &bull;
-                <a href="<?= home_url([], 'faq') ?>" class="text-muted text-decoration-underline">FAQ</a> &bull;
-                <a href="mailto:<?= sanitize(SITE_CONTACT) ?>" class="text-muted text-decoration-underline">Contact</a> &bull;
-                <a href="/sitemap.xml" class="text-muted text-decoration-underline">XML Sitemap</a>
-            </p>
-        </div>
-    </footer>
+    <?php render_site_footer(true); ?>
 
-    <!-- Interactive Scripts for OpenStreetMap, Full Screen & Leaflet Map Controls -->
-    <script>
-        const markerData = <?= json_encode($leafletMarkers, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
-        let leafletMapInstance = null;
-        let leafletFeatureGroup = null;
-
-        document.addEventListener('DOMContentLoaded', function() {
-            // Update Theme Icon on load
-            const currentTheme = document.documentElement.getAttribute('data-theme') || 'light';
-            updateThemeIcon(currentTheme);
-
-            // Close mobile menu on click outside
-            document.addEventListener('click', function(e) {
-                const nav = document.getElementById('mobileNavMenu');
-                const btn = e.target.closest('button[onclick*="toggleMobileNav"]');
-                if (nav && (nav.classList.contains('active') || nav.classList.contains('show')) && !nav.contains(e.target) && !btn) {
-                    nav.classList.remove('active');
-                    nav.classList.remove('show');
-                }
-            });
-
-            // Leaflet (~150 KB of JS and CSS) is fetched only once the map is
-            // about to enter the viewport. Loading it up front delayed first
-            // paint for every visitor, including those who never scroll to it.
-            const mapEl = document.getElementById('leafletMap');
-            if (mapEl) {
-                const loadMap = function() {
-                    if (window.L) { initLeafletMap(); return; }
-
-                    const css = document.createElement('link');
-                    css.rel = 'stylesheet';
-                    css.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
-                    document.head.appendChild(css);
-
-                    const js = document.createElement('script');
-                    js.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
-                    js.onload = initLeafletMap;
-                    document.body.appendChild(js);
-                };
-
-                if ('IntersectionObserver' in window) {
-                    const io = new IntersectionObserver(function(entries, obs) {
-                        if (entries.some(function(e) { return e.isIntersecting; })) {
-                            obs.disconnect();
-                            loadMap();
-                        }
-                    }, { rootMargin: '400px' });
-                    io.observe(mapEl);
-                } else {
-                    loadMap();
-                }
-            }
-        });
-
-        function initLeafletMap() {
-            if (leafletMapInstance || !window.L) return;
-
-            // Initialize OpenStreetMap Leaflet Engine
-            leafletMapInstance = L.map('leafletMap', {
-                center: [25, 20],
-                zoom: 2,
-                scrollWheelZoom: false
-            });
-
-            // OpenStreetMap Standard Free Tiles (No API key required)
-            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                maxZoom: 19,
-                attribution: '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank">OpenStreetMap</a> contributors'
-            }).addTo(leafletMapInstance);
-
-            leafletFeatureGroup = L.featureGroup();
-
-            // Country names come from the database and are interpolated into the
-            // popup markup below, so they are escaped first.
-            const escapeHtml = function(value) {
-                return String(value).replace(/[&<>"']/g, function(ch) {
-                    return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch];
-                });
-            };
-
-            // High-Tech Custom Pulsing Gold Markers for ALL Collection Countries
-            markerData.forEach(m => {
-                const pulseHtml = `
-                    <div class="pulse-marker-container">
-                        <div class="pulse-marker-ring"></div>
-                        <div class="pulse-marker-core">${Number(m.count)}</div>
-                    </div>
-                `;
-                
-                const customIcon = L.divIcon({
-                    html: pulseHtml,
-                    className: 'custom-leaflet-div-icon',
-                    iconSize: [32, 32],
-                    iconAnchor: [16, 16],
-                    popupAnchor: [0, -16]
-                });
-
-                const marker = L.marker([m.lat, m.lng], { icon: customIcon });
-
-                const popupHtml = `
-                    <div style="text-align: center; padding: 6px 4px; min-width: 140px;">
-                        <h6 style="margin: 0 0 2px 0; font-family: 'Playfair Display', Georgia, serif; font-weight: 700; font-size: 1rem;">${escapeHtml(m.country)}</h6>
-                        <div style="font-size: 0.85rem; color: #64748b; margin-bottom: 8px;">${Number(m.count)} coin${m.count === 1 ? '' : 's'} in archive</div>
-                        <a href="/?country=${encodeURIComponent(m.country)}#collection" class="btn btn-sm btn-primary-archival py-1 px-3 text-white text-decoration-none d-block" style="font-size: 0.75rem;">View Coins</a>
-                    </div>
-                `;
-                marker.bindPopup(popupHtml);
-                leafletFeatureGroup.addLayer(marker);
-            });
-
-            leafletFeatureGroup.addTo(leafletMapInstance);
-
-            // Auto fit bounds if markers exist and trigger invalidateSize
-            if (markerData.length > 0) {
-                leafletMapInstance.fitBounds(leafletFeatureGroup.getBounds().pad(0.2));
-            }
-
-            setTimeout(function() {
-                if (leafletMapInstance) {
-                    leafletMapInstance.invalidateSize();
-                }
-            }, 300);
-
-            window.addEventListener('resize', function() {
-                if (leafletMapInstance) {
-                    leafletMapInstance.invalidateSize();
-                }
-            });
-        }
-
-        function resetMapView() {
-            if (leafletMapInstance && leafletFeatureGroup && markerData.length > 0) {
-                leafletMapInstance.fitBounds(leafletFeatureGroup.getBounds().pad(0.2));
-            }
-        }
-
-        // Full Screen Toggle Feature
-        function toggleMapFullscreen() {
-            const mapCard = document.getElementById('countriesMap');
-            const icon = document.getElementById('mapFullscreenIcon');
-            const text = document.getElementById('mapFullscreenText');
-
-            if (!document.fullscreenElement && !document.webkitFullscreenElement) {
-                if (mapCard.requestFullscreen) {
-                    mapCard.requestFullscreen();
-                } else if (mapCard.webkitRequestFullscreen) {
-                    mapCard.webkitRequestFullscreen();
-                } else {
-                    // Fallback CSS fullscreen
-                    mapCard.classList.toggle('map-fullscreen-active');
-                    updateFullscreenUI(mapCard.classList.contains('map-fullscreen-active'));
-                }
-            } else {
-                if (document.exitFullscreen) {
-                    document.exitFullscreen();
-                } else if (document.webkitExitFullscreen) {
-                    document.webkitExitFullscreen();
-                }
-            }
-        }
-
-        function updateFullscreenUI(isFull) {
-            const icon = document.getElementById('mapFullscreenIcon');
-            const text = document.getElementById('mapFullscreenText');
-            if (icon) icon.innerText = isFull ? 'fullscreen_exit' : 'fullscreen';
-            if (text) text.innerText = isFull ? 'Exit Fullscreen' : 'Full Screen';
-            
-            setTimeout(function() {
-                if (leafletMapInstance) {
-                    leafletMapInstance.invalidateSize();
-                    if (leafletFeatureGroup && markerData.length > 0) {
-                        leafletMapInstance.fitBounds(leafletFeatureGroup.getBounds().pad(0.15));
-                    }
-                }
-            }, 250);
-        }
-
-        document.addEventListener('fullscreenchange', function() {
-            updateFullscreenUI(!!document.fullscreenElement);
-        });
-        document.addEventListener('webkitfullscreenchange', function() {
-            updateFullscreenUI(!!document.webkitFullscreenElement);
-        });
-    </script>
-    <!-- Bootstrap 5 Bundle JS -->
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js" defer></script>
+    <!-- Map data: read by atlas.js. JSON in a non-executing script block, with
+         every HTML-significant character escaped. -->
+    <script type="application/json" id="atlas-data"><?= json_encode(
+        ['items' => $atlasItems, 'contact' => SITE_CONTACT],
+        JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT
+    ) ?></script>
+    <script src="<?= sanitize(asset_url('/assets/js/site.js')) ?>" defer></script>
+    <script src="<?= sanitize(asset_url('/assets/js/atlas.js')) ?>" defer></script>
 </body>
 </html>

@@ -72,13 +72,15 @@ function send_security_headers($isAdminArea = false) {
         header('Strict-Transport-Security: max-age=31536000; includeSubDomains; preload');
     }
 
-    // Content Security Policy sized to what the pages actually load: Bootstrap and
-    // Leaflet from their CDNs, Google Fonts, OpenStreetMap tiles, and — on the
-    // admin screens only — the Gemini vision endpoint used by the autofill helper.
-    $script  = "'self' 'unsafe-inline' https://cdn.jsdelivr.net https://unpkg.com";
-    $style   = "'self' 'unsafe-inline' https://cdn.jsdelivr.net https://unpkg.com https://fonts.googleapis.com";
+    // Content Security Policy sized to what the pages actually load: Bootstrap
+    // (and Cropper.js on the admin screens) from jsDelivr, Google Fonts, and, on
+    // the admin screens only, the Gemini vision endpoint used by the autofill
+    // helper. The world map is a local SVG, so no tile server or map library
+    // origin is allowed any more.
+    $script  = "'self' 'unsafe-inline' https://cdn.jsdelivr.net";
+    $style   = "'self' 'unsafe-inline' https://cdn.jsdelivr.net https://fonts.googleapis.com";
     $font    = "'self' https://fonts.gstatic.com data:";
-    $img     = "'self' data: blob: https://*.tile.openstreetmap.org https://unpkg.com";
+    $img     = "'self' data: blob:";
     $connect = $isAdminArea
         ? "'self' https://generativelanguage.googleapis.com"
         : "'self'";

@@ -574,7 +574,7 @@ function generate_social_card(array $sourceFiles, $cacheKey) {
     $W = 1200; $H = 630; $PAD = 60; $GAP = 40;
 
     $canvas = imagecreatetruecolor($W, $H);
-    // Warm archival cream, matching --surface-bright in the stylesheet.
+    // Warm archival cream, close to the light theme's parchment (--bg).
     $bg = imagecolorallocate($canvas, 0xF8, 0xF6, 0xF0);
     imagefilledrectangle($canvas, 0, 0, $W, $H, $bg);
     $ring = imagecolorallocate($canvas, 0xD8, 0xD3, 0xC6);
@@ -745,6 +745,22 @@ function get_collection_year_range($pdo) {
     $parsed = [];
     foreach ($years as $yStr) {
         $clean = trim($yStr);
+
+        // A year recorded in another calendar carries its Gregorian equivalent in
+        // brackets: "VS 2056 (1999 AD)", "AH 1400 (1980)". Sorting by the first
+        // number made a Nepali Vikram Samvat date the newest coin in the archive,
+        // so the era span read "1918 – VS 2056 (1999 AD)". The bracketed year is
+        // used for both the comparison and the display.
+        if (preg_match('/\(\s*(?:c\.\s*)?(\d{3,4})\s*(AD|CE|BCE|BC)?\s*\)/i', $clean, $greg)) {
+            $num  = (int)$greg[1];
+            $isBC = !empty($greg[2]) && stripos($greg[2], 'B') === 0;
+            $parsed[] = [
+                'val'     => $isBC ? -$num : $num,
+                'display' => $num . ($isBC ? ' BC' : ''),
+            ];
+            continue;
+        }
+
         $isBC = (bool)preg_match('/BC|BCE/i', $clean);
         if (preg_match('/(\d+)/', $clean, $matches)) {
             $num = (int)$matches[1];
@@ -787,6 +803,56 @@ function get_country_coin_counts($pdo) {
         ];
     }
     return $mapData;
+}
+
+/**
+ * Everything the homepage atlas needs about each country in the collection:
+ * coin count, ISO code, a fallback position for historical issuers that have
+ * no modern outline, and up to three photographed coins for the details card.
+ *
+ * The country list comes from get_country_coin_counts(), so the atlas, the
+ * statistics and the gallery all count the same public rows.
+ */
+function get_atlas_payload($pdo, array $countryCounts, $perCountry = 3) {
+    $stmt = $pdo->query(
+        "SELECT id, country, denomination, year, obverse_image FROM coins
+         WHERE obverse_image IS NOT NULL AND obverse_image != '' AND " . public_coins_filter() . "
+         ORDER BY is_featured DESC, id DESC"
+    );
+
+    $samples = [];
+    foreach ($stmt as $row) {
+        $key = $row['country'];
+        if (isset($samples[$key]) && count($samples[$key]) >= $perCountry) {
+            continue;
+        }
+        $thumb = get_coin_thumbnail_path($row['obverse_image']);
+        if (is_placeholder_image($thumb)) {
+            continue;
+        }
+        $samples[$key][] = [
+            't' => coin_display_title($row),
+            'u' => coin_path($row),
+            'i' => $thumb,
+        ];
+    }
+
+    $items = [];
+    foreach ($countryCounts as $cc) {
+        // No hashed fallback position: a country the resolver does not know is
+        // listed beside the map rather than pinned to an arbitrary spot.
+        $coords = get_country_coordinates($cc['country'], false);
+        $items[] = [
+            'name'  => $cc['country'],
+            'iso'   => $cc['iso'],
+            'count' => (int)$cc['count'],
+            'lat'   => $coords ? round($coords[0], 3) : null,
+            'lng'   => $coords ? round($coords[1], 3) : null,
+            'url'   => home_url(['country' => $cc['country']], 'collection'),
+            'coins' => $samples[$cc['country']] ?? [],
+        ];
+    }
+    return $items;
 }
 
 /**

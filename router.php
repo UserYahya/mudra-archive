@@ -7,7 +7,7 @@
 $path = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
 
 // Block the local-only quarantine folder and the private directories.
-if (preg_match('#^/(_private|database|includes)(/|$)#', $path)) {
+if (preg_match('#^/(_private|database|includes|tools)(/|$)#', $path)) {
     http_response_code(403);
     exit('Forbidden');
 }

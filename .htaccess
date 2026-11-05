@@ -92,8 +92,9 @@ ErrorDocument 403 /404.php
     #    /coin/12-morgan-dollar-united-states-1921 -> coin.php?id=12
     RewriteRule ^coin/([0-9]+)(-[^/]*)?/?$ coin.php?id=$1 [L,QSA]
 
-    # 6. Never serve the local-only quarantine folder.
+    # 6. Never serve the local-only quarantine folder or the asset build scripts.
     RewriteRule ^_private(/|$) - [F,L]
+    RewriteRule ^tools(/|$) - [F,L]
 </IfModule>
 
 # ---------------------------------------------------------------------------
